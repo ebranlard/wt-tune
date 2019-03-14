@@ -9,6 +9,7 @@ import time
 import re
 import math
 import pdb
+import distutils.dir_util
 
 from deap import base
 from deap import creator
@@ -447,10 +448,7 @@ else:
 
 template_dir = os.path.normpath(os.path.join(ref_dir,'..',GA_DIR,'_Template'))
 
-# --------------------------------------------------------------------------------}
-# --- TODO: Move to FASTLIB 
-# --------------------------------------------------------------------------------{
-
+# 
 # -- Reference operating conditions and values (table as function of WS)
 RefValues=pd.read_csv(RefFile)
 RefValues['Pitch']=RefValues['Pitch']*0+1
@@ -470,8 +468,8 @@ print('- Reading reference polars from template')
 airfoils_ref=read_airfoils(airfoilFileNames,workdir=template_dir)
 plt.ion()
 figs=[]
-# figs+=figlib.fig_grid(AreaName='Left',ScreenName='RightScreen')
-# figs+=figlib.fig_grid(2,1,AreaName='Right',ScreenName='RightScreen')
+figs+=figlib.fig_grid(AreaName='Left',ScreenName='RightScreen')
+figs+=figlib.fig_grid(2,1,AreaName='Right',ScreenName='RightScreen')
 plt.show()
 ##
 ##pop,pop_init,best_ind=main(nBase=nGenes*nBasePerGene,nInd=10,CXPB=0.5,MUTPB=0.9,nIterMax=100,nPerTournament=2);

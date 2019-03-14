@@ -1,5 +1,6 @@
 all:
 	ipython Main_AirfoilTuning_GA_TorqueFlap.py
+# 	#ipython Main_AirfoilTuning_GA_TorqueFlap.py
 #	ipython PowerCurve.py
 # 	$u,ccipython Main_AirfoilTuning_GA.py
 m:

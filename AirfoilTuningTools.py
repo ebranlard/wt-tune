@@ -3,7 +3,6 @@ import distutils.dir_util
 import glob
 import matplotlib.pyplot as plt
 import numpy as np
-import weio
 import os
 import pandas as pd
 import random 
@@ -12,11 +11,11 @@ from scipy import interpolate
 import subprocess
 import time
 import pdb
+# My libs
 from pybra import pandalib
 from pybra import cmd
+import weio
 import fastlib
-# import pandalib #
-
 
 
 def prepare_run_folder(template_dir,sim_dir):
@@ -26,69 +25,38 @@ def prepare_run_folder(template_dir,sim_dir):
     fastlib.removeFASTOuputs(sim_dir)
 
 def prepare_template_folder(ref_dir,workdir,airfoilFileNames,OPER,FAST):
-    # Copying ref folder to workdir
-    distutils.dir_util.copy_tree(ref_dir, workdir)
+    def naming(p):
+        return '_{:02.0f}'.format(p['InflowFile|HWindSpeed'])
 
-    # --- Rewriting the airfoil files
+    PARAMS=[]
+    for wsp,rpm,pit in zip(OPER['WS'],OPER['RPM'],OPER['Pitch']):
+        p=dict()
+        if wsp<6:
+            p['FAST|TMax']         = 8
+        elif wsp<9:
+            p['FAST|TMax']         = 6
+        else:
+            p['FAST|TMax']         = 4
+        p['FAST|DT']               = 0.01
+        p['FAST|DT_Out']           = 0.1
+        p['FAST|OutFileFmt']       = 1 # TODO
+        p['EDFile|RotSpeed']       = rpm
+        p['EDFile|BlPitch(1)']     = pit
+        p['EDFile|BlPitch(2)']     = pit
+        p['EDFile|BlPitch(3)']     = pit
+        p['EDFile|GBoxEff']        = 94.
+        p['ServoFile|VS_Rgn2K']    = 0.00038245
+        p['ServoFile|GenEff']      = 94.
+        p['InflowFile|HWindSpeed'] = wsp
+        p['InflowFile|WindType']   = 1 # Setting steady wind
+        p['InflowFile|PLexp']      = 0.353 # 0.209
+        PARAMS.append(p)
+
+    fastlib.templateReplace(ref_dir,PARAMS,workdir=workdir,name_function=naming,RemoveRefSubFiles=True)
+    # --- Rewriting the airfoil files, purely to reduce diff
     for f in airfoilFileNames:
         AF=weio.FASTInFile(os.path.join(workdir,f))
         AF.write();
-    
-    #
-    if FAST!=1:
-        return
-    print('Generating fast files for different wind speeds..')
-
-    # Files to be patched
-    fast_files=glob.glob(os.path.join(ref_dir,'*.fst'))
-    if len(fast_files)!=1:
-        raise Exception('Only one fst file should be present in {}'.format(ref_dir))
-    fastfile_ref = os.path.basename(fast_files[0])
-    Fst = weio.FASTInFile(os.path.join(workdir, fastfile_ref));
-    windfile_ref = Fst['InflowFile'].strip('"')
-    elasfile_ref = Fst['EDFile'].strip('"')
-    servfile_ref = Fst['ServoFile'].strip('"')
-
-    # --- Create Wind and Turbine files
-    Wnd = weio.FASTInFile(os.path.join(workdir, windfile_ref));
-    Est = weio.FASTInFile(os.path.join(workdir, elasfile_ref));
-    Srv = weio.FASTInFile(os.path.join(workdir, servfile_ref));
-    Wnd['WindType'] = 1 # Setting steady wind
-    for wsp,rpm,pit in zip(OPER['WS'],OPER['RPM'],OPER['Pitch']):
-        windfilename = windfile_ref.replace('.dat','_{:02d}.dat'.format(int(wsp)))
-        fastfilename = fastfile_ref.replace('.fst','_{:02d}.fst'.format(int(wsp)))
-        elasfilename = elasfile_ref.replace('.dat','_{:02d}.dat'.format(int(wsp)))
-        servfilename  = servfile_ref.replace('.dat','_{:02d}.dat'.format(int(wsp)))
-        print(windfilename)
-        Wnd['HWindSpeed'] = wsp
-        Fst['InflowFile'] = '"'+windfilename+'"'
-        Fst['EDFile']     = '"'+elasfilename+'"'
-        Fst['ServoFile']  = '"'+servfilename+'"'
-        Fst['DT'    ]     = 0.01
-        Fst['DT_Out']     = 0.1
-        Fst['OutFileFmt'] = 1 # TODO
-        # NOTE: 4, 3 ,2
-        if wsp<6:
-            Fst['TMax'  ]     = 8
-        elif wsp<9:
-            Fst['TMax'  ]     = 6
-        else:
-            Fst['TMax'  ]     = 4
-        Est['RotSpeed']   = rpm
-        Est['BlPitch(1)'] = pit
-        Est['BlPitch(2)'] = pit
-        Est['BlPitch(3)'] = pit
-        #Fst['AeroFile'] = '"'+windfilename+'"'
-        Wnd.write(os.path.join(workdir,windfilename))
-        Fst.write(os.path.join(workdir,fastfilename))
-        Est.write(os.path.join(workdir,elasfilename))
-        Srv.write(os.path.join(workdir,servfilename))
-
-    os.remove(os.path.join(workdir,fastfile_ref))
-    os.remove(os.path.join(workdir,windfile_ref))
-    os.remove(os.path.join(workdir,elasfile_ref))
-    os.remove(os.path.join(workdir,servfile_ref))
-
 
 def read_airfoils(airfoilFileNames,workdir=''):
     airfoils=[]
@@ -214,6 +182,7 @@ def run_sim(sim_dir,FAST,nSIM,exe=None):
         if len(files)==0:
             raise Exception('No fast file found in sim folder: '+sim_dir)
         if len(files)!=nSIM:
+            print(files)
             raise Exception('The number of fast files ({}) is not equal to nSIM ({}) in: {}'.format(len(files),nSIM,sim_dir))
         cmd.run_cmds(files, exe, parallel=True, ShowOutputs=False)
     else:

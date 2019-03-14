@@ -175,6 +175,9 @@ def timelinePlot(df,fig):
     for i in range(len(numeric_cols)):
         ax.plot([0,len(df)],[i,i],'k--');
     ax.legend(loc='center left', bbox_to_anchor=(1.0, 0.5));
+    ax.set_title('Evolution of chromosome bases')
+    ax.set_xlabel('Cumulative number of chromosomes')
+    ax.set_ylabel('Bases number')
 
 
 
