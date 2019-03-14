@@ -17,7 +17,6 @@ from deap import tools
 # Mylibraries
 from pybra import figlib
 from pybra import galib
-import nwtcio
 import weio
 from AirfoilTuningTools import *
 
@@ -471,8 +470,8 @@ print('- Reading reference polars from template')
 airfoils_ref=read_airfoils(airfoilFileNames,workdir=template_dir)
 plt.ion()
 figs=[]
-figs+=figlib.fig_grid(AreaName='Left',ScreenName='RightScreen')
-figs+=figlib.fig_grid(2,1,AreaName='Right',ScreenName='RightScreen')
+# figs+=figlib.fig_grid(AreaName='Left',ScreenName='RightScreen')
+# figs+=figlib.fig_grid(2,1,AreaName='Right',ScreenName='RightScreen')
 plt.show()
 ##
 ##pop,pop_init,best_ind=main(nBase=nGenes*nBasePerGene,nInd=10,CXPB=0.5,MUTPB=0.9,nIterMax=100,nPerTournament=2);

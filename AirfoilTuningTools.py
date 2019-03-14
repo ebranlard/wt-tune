@@ -3,7 +3,7 @@ import distutils.dir_util
 import glob
 import matplotlib.pyplot as plt
 import numpy as np
-import nwtcio
+import weio
 import os
 import pandas as pd
 import random 
@@ -11,6 +11,7 @@ import shutil
 from scipy import interpolate
 import subprocess
 import time
+import pdb
 from pybra import pandalib
 # import pandalib #
 
@@ -26,12 +27,12 @@ def prepare_run_folder(template_dir,sim_dir):
         os.remove(f)
 
 def prepare_template_folder(ref_dir,workdir,airfoilFileNames,OPER,FAST):
-    # Copying ref folder
+    # Copying ref folder to workdir
     distutils.dir_util.copy_tree(ref_dir, workdir)
 
     # --- Rewriting the airfoil files
     for f in airfoilFileNames:
-        AF=nwtcio.FastFile(os.path.join(workdir,f))
+        AF=weio.FASTInFile(os.path.join(workdir,f))
         AF.write();
     
     #
@@ -39,27 +40,31 @@ def prepare_template_folder(ref_dir,workdir,airfoilFileNames,OPER,FAST):
         return
     print('Generating fast files for different wind speeds..')
 
-    # TODO - automatic find
-#     windfile_ref = 'InflowWind.dat';
-#     fastfile_ref = 'Turbine.fst';
-#     elasfile_ref = 'ElastoDyn.dat';
-    windfile_ref = 'SNLV27_InflowWind.dat';
-    fastfile_ref = 'SNLV27_OF2.fst';
-    elasfile_ref = 'SNLV27_ElastoDyn.dat';
+    # Files to be patched
+    fast_files=glob.glob(os.path.join(ref_dir,'*.fst'))
+    if len(fast_files)!=1:
+        raise Exception('Only one fst file should be present in {}'.format(ref_dir))
+    fastfile_ref = os.path.basename(fast_files[0])
+    Fst = weio.FASTInFile(os.path.join(workdir, fastfile_ref));
+    windfile_ref = Fst['InflowFile'].strip('"')
+    elasfile_ref = Fst['EDFile'].strip('"')
+    servfile_ref = Fst['ServoFile'].strip('"')
 
     # --- Create Wind and Turbine files
-    Wnd = nwtcio.FastFile(os.path.join(workdir, windfile_ref));
-    Fst = nwtcio.FastFile(os.path.join(workdir, fastfile_ref));
-    Est = nwtcio.FastFile(os.path.join(workdir, elasfile_ref));
+    Wnd = weio.FASTInFile(os.path.join(workdir, windfile_ref));
+    Est = weio.FASTInFile(os.path.join(workdir, elasfile_ref));
+    Srv = weio.FASTInFile(os.path.join(workdir, servfile_ref));
     Wnd['WindType'] = 1 # Setting steady wind
     for wsp,rpm,pit in zip(OPER['WS'],OPER['RPM'],OPER['Pitch']):
         windfilename = windfile_ref.replace('.dat','_{:02d}.dat'.format(int(wsp)))
         fastfilename = fastfile_ref.replace('.fst','_{:02d}.fst'.format(int(wsp)))
         elasfilename = elasfile_ref.replace('.dat','_{:02d}.dat'.format(int(wsp)))
+        servfilename  = servfile_ref.replace('.dat','_{:02d}.dat'.format(int(wsp)))
         print(windfilename)
         Wnd['HWindSpeed'] = wsp
         Fst['InflowFile'] = '"'+windfilename+'"'
         Fst['EDFile']     = '"'+elasfilename+'"'
+        Fst['ServoFile']  = '"'+servfilename+'"'
         Fst['DT'    ]     = 0.01
         Fst['DT_Out']     = 0.1
         Fst['OutFileFmt'] = 1 # TODO
@@ -78,16 +83,18 @@ def prepare_template_folder(ref_dir,workdir,airfoilFileNames,OPER,FAST):
         Wnd.write(os.path.join(workdir,windfilename))
         Fst.write(os.path.join(workdir,fastfilename))
         Est.write(os.path.join(workdir,elasfilename))
+        Srv.write(os.path.join(workdir,servfilename))
 
     os.remove(os.path.join(workdir,fastfile_ref))
     os.remove(os.path.join(workdir,windfile_ref))
     os.remove(os.path.join(workdir,elasfile_ref))
+    os.remove(os.path.join(workdir,servfile_ref))
 
 
 def read_airfoils(airfoilFileNames,workdir=''):
     airfoils=[]
     for f in airfoilFileNames:
-        AF = nwtcio.FastFile(os.path.join(workdir,f))
+        AF = weio.FASTInFile(os.path.join(workdir,f))
         af=dict()
         af['name']=os.path.splitext(os.path.basename(f))[0]
         af['polar']=AF['AFCoeff']
@@ -192,7 +199,7 @@ def rewrite_airfoils(airfoils,airfoilFileNames,workdir=''):
     # Reading the files, chainging the polars and rewriting
     for af,f in zip(airfoils,airfoilFileNames):
         #print('Rewriting {}'.format(os.path.join(workdir,f)))
-        AF = nwtcio.FastFile(os.path.join(workdir,f))
+        AF = weio.FASTInFile(os.path.join(workdir,f))
         AF['AFCoeff'] = af['polar']
         AF.write()
 
@@ -285,8 +292,9 @@ def postpro_simdir(sim_dir,TimeAvgWindow,FAST):
     #'RtSpeed', 'RtTSR', 'RtAeroCp', 'RtAeroCq', 'RtAeroCt', 'RtVAvgxh', 'RtVAvgyh', 'RtVAvgzh', 'RtAeroFxh', 'RtAeroFyh', 'RtAeroFzh', 'RtAeroMxh', 'RtAeroMyh', 'RtAeroMzh', 'RtAeroPwr', 'RtSkew', 'RtArea'],
 
     #
-    fast_file=glob.glob(os.path.join(sim_dir,'*.fst'))
-    Fst = nwtcio.FastFile(fast_file[0]);
+    #fast_file=glob.glob(os.path.join(sim_dir,'*.fst'))
+    #Fst = weio.FASTInFile(fast_file[0]);
+    #pdb.set_trace()
 
     perf=pd.DataFrame(columns = col_names)
     
