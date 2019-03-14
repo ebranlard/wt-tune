@@ -222,6 +222,7 @@ def postpro_simdir(sim_dir,TimeAvgWindow,FAST):
     #pdb.set_trace()
 
     perf=pd.DataFrame(columns = col_names)
+
     
     for outfilename in files:
         #print(outfilename)
@@ -229,9 +230,16 @@ def postpro_simdir(sim_dir,TimeAvgWindow,FAST):
         df=pd.read_csv(outfilename, sep='\t', skiprows=[0,1,2,3,4,5,7])
         df.rename(columns=lambda x: x.strip(),inplace=True)
         
+        #
         # Start time and end time of window
         iEndTime=df.index[-1]
         endTime=df['Time'][iEndTime]
+        if TimeAvgWindow is None:
+            Omega=df['RotSpeed'].mean()
+            TimeAvgWindow=(2*np.pi/Omega)*2 # averaging about two rotations
+            if TimeAvgWindow>endTime:
+                print('>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>Time too short!')
+            TimeAvgWindow=min(TimeAvgWindow,endTime)
         iStartTime=(df['Time']-(endTime-TimeAvgWindow)).abs().idxmin()
         startTime=df['Time'][df.index[iStartTime]]
         # Absolute and relative differences at wind extremities
@@ -301,7 +309,7 @@ def get_perf_error(perf_sim,ISel,perf_ref=None,perf_all=None):
     #print(perf_ref[ISel])
     RelError=abs(perf_sim[ISel]-perf_ref[ISel])/perf_ref[ISel].max()
     AbsError=abs(perf_sim[ISel]-perf_ref[ISel])
-    return RelError.mean(),perf_ref
+    return RelError.mean()*100,perf_ref
 
 
 

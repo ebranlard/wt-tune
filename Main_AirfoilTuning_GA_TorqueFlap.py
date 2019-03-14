@@ -19,16 +19,85 @@ from deap import tools
 from pybra import figlib
 from pybra import galib
 import weio
+import fastlib
 from AirfoilTuningTools import *
+
+def genotype_to_FASTphenotype(chromosome):
+    """ Given a chromosome, create a FAST simulation folder
+        Uses the global variables: RefValues, CH_MAP, ref_dir
+    """
+    if not hasattr(chromosome,'data'):
+        raise NotImplementedError('')
+
+    def naming(p):
+        return '_{:02.0f}'.format(p['InflowFile|HWindSpeed'])
+
+    if len(chromosome)!=CH_MAP.nBases:
+        raise Exception('Chromosome length ({}) not compatible with CH_MAP length ({})'.format(len(chromosome),CH_MAP.nBases))
+
+    #print('')
+    #for gm,gene in zip(CH_MAP, CH_MAP.split(chromosome)):
+    #    print(gm.show_full_raw(gene))
+
+    PARAMS=[]
+    for wsp,rpm,pit in zip(RefValues['WS'],RefValues['RPM'],RefValues['Pitch']):
+        p=dict()
+        if wsp<6:
+            p['FAST|TMax']         = 18
+        elif wsp<9:
+            p['FAST|TMax']         = 16
+        else:
+            p['FAST|TMax']         = 14
+        p['FAST|DT']               = 0.01
+        p['FAST|DT_Out']           = 0.1
+        p['FAST|OutFileFmt']       = 1 # TODO
+        p['EDFile|RotSpeed']       = rpm
+        p['EDFile|BlPitch(1)']     = pit
+        p['EDFile|BlPitch(2)']     = pit
+        p['EDFile|BlPitch(3)']     = pit
+        #p['EDFile|GBoxEff']        = 94.
+        #p['ServoFile|VS_Rgn2K']    = 0.00038245
+        #p['ServoFile|GenEff']      = 94.
+        p['InflowFile|HWindSpeed'] = wsp
+        p['InflowFile|WindType']   = 1 # Setting steady wind
+        #p['InflowFile|PLexp']      = 0.353 # 0.209
+        for gm,gene in zip(CH_MAP, CH_MAP.split(chromosome)):
+            if gm.kind=='fast_param':
+                p[gm.name]=gm.decode(gene)
+            elif gm.kind=='builtin':
+                if gm.name=='pitch':
+                    p['EDFile|BlPitch(1)']     = gm.decode(gene)
+                    p['EDFile|BlPitch(2)']     = gm.decode(gene)
+                    p['EDFile|BlPitch(3)']     = gm.decode(gene)
+                #print(gm.name, '->',p[gm.name],gene)
+    
+        PARAMS.append(p)
+
+    sim_dir=chromosome.data['dir']
+    fastlib.templateReplace(ref_dir,PARAMS,workdir=sim_dir,name_function=naming,RemoveRefSubFiles=True)
+
+    # --- Patching the airfoil files
+    for gm,gene in zip(CH_MAP, CH_MAP.split(chromosome)):
+        if gm.kind=='airfoil':
+            af_mut = copy.deepcopy(gm.meta)
+            af_mut = patch_airfoil(gene,af_mut)
+            AF = weio.FASTInFile(os.path.join(sim_dir,gm.name))
+            AF['AFCoeff'] = af_mut['polar']
+            AF.write()
+
 
 
 ### --- PARAMETERS
-def individualFitness(chromosome,ID=None):
-    if ID is None:
-        ID=galib.chromID(chromosome)
-    print('--- EVALUATING {} '.format(ID),end='')
+def individualFitness(chromosome):
+    # Basic data
+    ID      = galib.chromID(chromosome)
+    sim_dir = os.path.normpath(os.path.join(ref_dir,'..',GA_DIR,''+ID))
+    chromosome.data = dict()
+    chromosome.data['ID']   = ID
+    chromosome.data['dir']  = sim_dir 
+    #print('--- EVALUATING {} '.format(chromosome.data['ID']),end='')
+    print('--- EVALUATING {} '.format(CH_MAP.show_full(chromosome,' ')),end='')
     # Checking if all files are present and with non zero size in the sim folder
-    sim_dir  = os.path.normpath(os.path.join(ref_dir,'..',GA_DIR,''+ID))
     outfiles = glob.glob(os.path.join(sim_dir,'*.out'))
     bFilesOK=False
     if (len(outfiles)==len(WS_SIM)):
@@ -39,45 +108,29 @@ def individualFitness(chromosome,ID=None):
         # No need to rerun
         print(' >>> ', end='') 
     else:
-        #print('   Preparing run folder')
-        prepare_run_folder(template_dir,sim_dir)
-        #print('   Changing polars and saving in run folder')
-        # TODO here, general chromosome changes, not only airfoils
-        airfoils_mut  = patch_airfoil_files(chromosome,airfoils_ref,airfoilFileNames,workdir=sim_dir)
+        fast_files = genotype_to_FASTphenotype(chromosome)
         #print('  Running fast in sim folder')
         run_sim(sim_dir,FAST,len(WS_SIM),exe=EXE)
         print(' --- ', end='')
 
-    # Storing Data for convenience
-    chromosome.data = dict()
-    chromosome.data['ID']   = ID
+    # Evaluating performances and fitnesses
     chromosome.data['perf'] = postpro_simdir(sim_dir, TimeAvgWindow = TIMEAVGWINDOW, FAST = FAST)
     perf_err,_ = get_perf_error(chromosome.data['perf'], PerformanceSignals, perf_ref=RefValues)
     fits = [v for v in perf_err.values]
-    print(' Fit: ',np.around(fits,decimals=4))
-    #print(type(fits[0]))
+    print(' Fit: ['+','.join(['{:5.2f}'.format(f) for f in fits])+' ]')
     return fits
 
 def individualPlot(chromosome,fig=None):
     if not fig:
         fig=plt.figure()
-    # We have to reread the data
-    ID=galib.chromID(chromosome)
-    sim_dir = os.path.normpath(os.path.join(ref_dir,'..',GA_DIR,''+ID))
-    airfoils_mut = read_airfoils(airfoilFileNames,workdir=sim_dir)
-
     # Plotting polars
     for a in fig.axes:
         a.clear()
-    fig=plot_airfoils(airfoils_ref,color='k',fig=fig, names=[os.path.splitext(os.path.basename(fn))[0] for fn in airfoilFileNames])
-    fig=plot_airfoils(airfoils_mut,fig=fig)
-
-# def basesnames():
-#     return ['Clp{0} Clm{0} Cd{0}'.format(x+1) for x in range(nGenes)]
-# 
-# def fitsnames():
-#     return ['Clp{0} Clm{0} Cd{0}'.format(x+1) for x in range(nGenes)]
-
+    if len(airfoils_ref)>0:
+        # We have to reread the data
+        airfoils_mut = read_airfoils(airfoilFileNames,workdir=chromosome.data['dir'])
+        fig=plot_airfoils(airfoils_ref,color='k',fig=fig, names=[os.path.splitext(os.path.basename(fn))[0] for fn in airfoilFileNames])
+        fig=plot_airfoils(airfoils_mut,fig=fig)
 
 def performancePlot(population,ax=None,kind='',title=''):
     """ Plot the ref signals and the population values for the wanted data
@@ -123,7 +176,7 @@ def populationPlot(pop,stats=None,fits=None,fig=None,kind='new',title=None):
         fig.add_subplot(224)
     ax = fig.axes
     nInd=len(pop)
-    XYC=np.zeros((nInd*nGenes*nBasePerGene,3))
+    XYC=np.zeros((nInd*CH_MAP.nBases,3))
     FFC=np.zeros((nInd,3))
     c=0
     if kind=='all':
@@ -134,8 +187,8 @@ def populationPlot(pop,stats=None,fits=None,fig=None,kind='new',title=None):
         # we don't care about fitness
         for j,p in enumerate(pop):
             for i in range(len(p)):
-                iBase=i % 3
-                iGene = i/3
+                #iBase=i % 3
+                #iGene = i/3
                 #XYC[c,0]=iBase*nGenes+iGene +j*SpreadFact/nInd
                 XYC[c,0]=i
                 XYC[c,1]=p[i]
@@ -149,8 +202,8 @@ def populationPlot(pop,stats=None,fits=None,fig=None,kind='new',title=None):
 
         for p,f,j in zip(pop,fits,range(nInd)):
             for i in range(len(p)):
-                iBase=i % 3
-                iGene = i/3
+                #iBase=i % 3
+                #iGene = i/3
                 #XYC[c,0]=iBase*nGenes+iGene +j*0.2/nInd
                 XYC[c,0]=i
                 XYC[c,1]=p[i]
@@ -166,15 +219,15 @@ def populationPlot(pop,stats=None,fits=None,fig=None,kind='new',title=None):
         ax[2].scatter(XYC[:,0],XYC[:,1],color=[0.6,0.6,0.6],marker='.',s=15)
         ax[3].scatter(FFC[:,0],FFC[:,1],color=[0.6,0.6,0.6],marker='.',s=15)
         ax[3].grid()
-        ax[2].axis([-0.1, nGenes*nBasePerGene+0.1,-0.1, 1.1])
-        ax[3].axis([1e-3, 1.0, 1e-3, 1.0])
+        ax[2].axis([-0.1, CH_MAP.nBases+0.1,-0.1, 1.1])
+        ax[3].axis([1e-2, 100, 1e-2, 100])
         ax[3].set_yscale('log')
         ax[3].set_xscale('log')
         ax[3].set_xlabel('Fitness '+PerformanceSignals[0])
         ax[3].set_ylabel('Fitness '+PerformanceSignals[1])
-        # Separating 
-        for iBase in range(nBasePerGene):
-            ax[2].plot([iBase*nGenes,iBase*nGenes],[0,1],'k--')
+        # Separating Genes- TODO
+        #for iBase in range(nBasePerGene):
+        #    ax[2].plot([iBase*nGenes,iBase*nGenes],[0,1],'k--')
         if title is not None:
             fig.suptitle(title)
 
@@ -232,7 +285,7 @@ def populationDiversity(pop):
 def getRandomPop(n=3):
     toolbox = base.Toolbox()
     toolbox.register("attr_float" , random.random)
-    toolbox.register("individual", tools.initRepeat, creator.Individual, toolbox.attr_float, nGenes*nBasePerGene) 
+    toolbox.register("individual", tools.initRepeat, creator.Individual, toolbox.attr_float, CH_MAP.nBases)
     toolbox.register("population", tools.initRepeat, list, toolbox.individual)
     return toolbox.population(n=n)
 
@@ -240,14 +293,14 @@ def getNeutralChromosome():
     print('Neutral chromosome...')
     toolbox = base.Toolbox()
     toolbox.register("attr_float" , random.random)
-    toolbox.register("individual", tools.initRepeat, creator.Individual, toolbox.attr_float, nGenes*nBasePerGene) 
+    toolbox.register("individual", tools.initRepeat, creator.Individual, toolbox.attr_float, CH_MAP.nBases)
     neutral=toolbox.individual()
-    neutral[:]=np.matlib.repmat([0.5,0.5,0],1,nGenes)[0].tolist() # <<< FUNCTION OF IMPLEMENTATION
+    neutral[:]=CH_MAP.neutralChromosome()
     neutral.fitness.values=individualFitness(neutral)
     return neutral
 
 
-def main(nBase=2,nInd=10,nIndSelect=10,CXPB=0.3,MUTPB=0.3,nIterMax=100,nPerTournament=2,MutStep=0.1,MutMethod='PolyBound',CXFunction=tools.cxTwoPoint, MutParam1=0.05):
+def mainGA(nBase=2,nInd=10,nIndSelect=10,CXPB=0.3,MUTPB=0.3,nIterMax=100,nPerTournament=2,MutStep=0.1,MutMethod='PolyBound',CXFunction=tools.cxTwoPoint, MutParam1=0.05):
     # Global variables for plotting 
     #random.seed(64)
     random.seed(59)
@@ -294,7 +347,7 @@ def main(nBase=2,nInd=10,nIndSelect=10,CXPB=0.3,MUTPB=0.3,nIterMax=100,nPerTourn
     for ind in pop:
         ind.fitness.values = toolbox.evaluate(ind)
         #ind.fitness.values = [fit[0]*FitScale +  div*DivScale]
-    #galib.populationPrint(pop,nBasePerGene,'INITIAL')
+    #galib.populationPrint(pop,1,'INITIAL')
     DB_file      = galib.populationSave(pop,newfile=True,directory=DB_DIR)
     DB_file_Best = galib.populationSave(pop,newfile=True,directory=DB_DIR,basename='GA_DB_BEST_')
 
@@ -369,11 +422,12 @@ def main(nBase=2,nInd=10,nIndSelect=10,CXPB=0.3,MUTPB=0.3,nIterMax=100,nPerTourn
             v=[best.data['ID']]+[v for v in best.fitness.values]+best
             sv = ', '.join([str(val) for val in v])
             f.write(sv)
-        df = pd.concat([best.data['perf'],NeutralValues,RefValuesNewCol],axis=1)
+            f.write(CH_MAP.show_full(best))
+        df = pd.concat([RefValuesNewCol,best.data['perf'],NeutralValues,],axis=1)
         df.to_csv(os.path.join(best_dir_dest,'Results.csv'),index=False)
 
         # --- STATS
-        last_stats,stats = galib.populationStats(pop,best,stats)
+        recent_stats,stats = galib.populationStats(pop,best,stats)
         # --- INFO STRING
         sGen  = "Gen:{0:d} ".format(g)
         sInfo = " Xd:{0:d}  Mut:{1:d}  X+M:{2:d}  Pop:{3:d} ".format(nCX, nMute, len(invalid_ind), len(offspring))
@@ -386,12 +440,13 @@ def main(nBase=2,nInd=10,nIndSelect=10,CXPB=0.3,MUTPB=0.3,nIterMax=100,nPerTourn
         galib.populationSave(offspring,directory=DB_DIR)
         galib.populationSave([best]   ,directory=DB_DIR,basename='GA_DB_BEST_')
         if len(figs)>0:
-            individualPlot(best,fig=figs[1])
+            if len(figs)>2:
+                individualPlot(best,fig=figs[2])
             #populationPrint(offspring,'NEW')
             dfAll,pop_uniq  = galib.populationLoad(DB_file     ,nFits=len(pop[0].fitness.values))
             dfBest,pop_best = galib.populationLoad(DB_file_Best,nFits=len(pop[0].fitness.values))
             #galib.timelinePlot(df,fig=figs[2])
-            galib.timelinePlot(dfBest,fig=figs[2])
+            galib.timelinePlot(dfBest,fig=figs[1],noFit=True)
             populationPlot(pop_uniq, stats=stats,fig=figs[0],kind='all',title=sGen+sInfo+sBest)
             populationPlot(parents              ,fig=figs[0],kind='parents')
             populationPlot(offspring            ,fig=figs[0],kind='new')
@@ -407,35 +462,45 @@ def main(nBase=2,nInd=10,nIndSelect=10,CXPB=0.3,MUTPB=0.3,nIterMax=100,nPerTourn
 
     return pop,best
 
+def parameticGA(ch_map,nPerBase):
+    class Indiv(list):
+        pass
+    nBases=ch_map.nBases
+    if isinstance(nPerBase,list):
+        if len(nPerBase)!=nBases:
+            raise Exception('IF nPerBase is a list it must be the same length as the number of bases')
+    else:
+        nPerBase= [nPerBase]*nBases
+
+    nTot       = np.prod(nPerBase)
+    nValuesCum = np.insert(np.cumprod(nPerBase),0,1)[:-1];
+    vBaseValues=[np.linspace(0,1,n) for n in nPerBase]
+    
+    print('Creating population of {} individuals...'.format(nTot))
+    pop=[]
+    for i in range(nTot):
+        Indexes=(np.mod(np.floor(i/nValuesCum),nPerBase)).astype(int);
+        chromosome=Indiv([vBaseValues[j][Indexes[j]] for j in range(nBases) ])
+        #print(i,Indexes,chromosome)
+        pop.append(chromosome)
+    print('Evaluating population...')
+    fits=[]
+    for p in pop:
+        fits.append(individualFitness(p))
+    return fits,pop
+
 
 # --------------------------------------------------------------------------------}
 # ---  
 # --------------------------------------------------------------------------------{
 ### --- PARAMETERS
-airfoilFileNames = ['AD_5_63-214_mod.dat','AD_4_63-218_mod.dat','AD_3_63-224_mod.dat','AD_2_63-235_mod.dat']
-airfoilFileNames = [os.path.join('AeroData_AD15',a) for a in airfoilFileNames]
-PerformanceSignals = ['RPM','FlapM','Pgen']
-IPlot              = PerformanceSignals
-DECIMALS=3  #<<<
-objectiveWeights=(-1.0,)*len(PerformanceSignals) # negative = minimalization 
-nObjectives=len(objectiveWeights)
-nGenes= len(airfoilFileNames)
-nBasePerGene=3
-bEnforceBests=True
-bEnforceNeutral=False
-
-EXE     = '_Exe/OpenFAST2_x64s_ebra.exe'  ;
-RefFile = '_data/swiftData_Half_Binned.csv'
-
 FAST=1
-
-
 if FAST==1:
     GA_DIR  = '_GA_Runs'
     DB_DIR  = '_GA_Runs_DB'
     ref_dir = 'OpenFAST_V27_v2_ForGA/'
-    WS_SIM  = np.array([4.0, 5.0, 8.0, 9.0, 10])
-    TIMEAVGWINDOW=1
+    WS_SIM  = np.array([4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10])
+    TIMEAVGWINDOW=None
 else:
     GA_DIR  = '_GA_Runs_AD'
     DB_DIR  = '_GA_Runs_AD_DB'
@@ -444,11 +509,58 @@ else:
     WS_SIM  = np.array([ 5, 7, 9, 11, 13, 15, 17, 19]);
     TIMEAVGWINDOW=0.5
 
+### --- PARAMETERS
+airfoilFileNames = ['AD_5_63-214_mod.dat','AD_4_63-218_mod.dat','AD_3_63-224_mod.dat','AD_2_63-235_mod.dat']
+airfoilFileNames = [os.path.join('AeroData_AD15',a) for a in airfoilFileNames]
+
+PerformanceSignals = ['RPM','FlapM','Pgen']
+
+DECIMALS=3  #<<< IMPORTANT FOR RESOLUTION
+
+CH_MAP=galib.ChromosomeMap()
+# TUNING AIRFOILS ONLY:
+airfoils_ref=[]
+for af in airfoilFileNames:
+    af_ref=read_airfoils([af],workdir=ref_dir)[0]
+#     gene_info=galib.GeneMap(nBases=3, kind='airfoil',name=af, meta=af_ref, protein_ranges=[[0,1],[0,1],[0,1]], protein_neutr=[0.5,0.5,0])
+#     airfoils_ref.append(af_ref)
+#     CH_MAP.append(gene_info)
+
+CH_MAP.add(galib.GeneMap(nBases=1, kind='fast_param', name='ServoFile|GenEff'  ,protein_ranges=[[90,100]]       , protein_neutr=[94] ))
+CH_MAP.add(galib.GeneMap(nBases=1, kind='fast_param', name='EDFile|GBoxEff'    ,protein_ranges=[[90,100]]       , protein_neutr=[94] ))
+CH_MAP.add(galib.GeneMap(nBases=1, kind='fast_param', name='ServoFile|VS_Rgn2K',protein_ranges=[[0.0003,0.0005]], protein_neutr=[0.00038245] ))
+CH_MAP.add(galib.GeneMap(nBases=1, kind='builtin', name='pitch',protein_ranges=[[-2,3]], protein_neutr=[0.0] ))
 
 
-template_dir = os.path.normpath(os.path.join(ref_dir,'..',GA_DIR,'_Template'))
 
-# 
+
+
+nBasePerGene=3
+
+bEnforceBests=True
+bEnforceNeutral=False
+
+EXE     = '_Exe/OpenFAST2_x64s_ebra.exe'  ;
+RefFile = '_data/swiftData_Half_Binned.csv'
+
+
+
+# --------------------------------------------------------------------------------}
+# --- Derived params 
+# --------------------------------------------------------------------------------{
+# --- Derived Params
+IPlot              = PerformanceSignals
+objectiveWeights=(-1.0,)*len(PerformanceSignals) # negative = minimalization 
+nObjectives=len(objectiveWeights)
+
+# template_dir = os.path.normpath(os.path.join(ref_dir,'..',GA_DIR,'_Template'))
+print('Number of Bases    :',CH_MAP.nBases)
+print('Number of Genes    :',CH_MAP.nGenes)
+print('Neutral chromosome :',CH_MAP.neutralChromosome())
+print('Neutral protein    :',CH_MAP.neutralProtein())
+print(CH_MAP)
+
+
 # -- Reference operating conditions and values (table as function of WS)
 RefValues=pd.read_csv(RefFile)
 RefValues['Pitch']=RefValues['Pitch']*0+1
@@ -459,39 +571,43 @@ PerfScale['WS'] = PerfScale['WS']*0+1
 RefValuesNewCol=RefValues.copy()
 RefValuesNewCol.columns=[c+'_ref' for c in RefValues.columns.values]
 
+
+
+
+
 print('Simulations:')
 print(RefValues)
 ### --- INIT
-print('- Preparing template folder')
-prepare_template_folder(ref_dir,template_dir,airfoilFileNames,RefValues,FAST)
-print('- Reading reference polars from template')
-airfoils_ref=read_airfoils(airfoilFileNames,workdir=template_dir)
+# print('- Preparing template folder')
+# prepare_template_folder(ref_dir,template_dir,airfoilFileNames,RefValues,FAST)
 plt.ion()
 figs=[]
-figs+=figlib.fig_grid(AreaName='Left',ScreenName='RightScreen')
-figs+=figlib.fig_grid(2,1,AreaName='Right',ScreenName='RightScreen')
+# figs+=figlib.fig_grid(AreaName='Left',ScreenName='RightScreen')
+# # figs+=figlib.fig_grid(2,1,AreaName='Right',ScreenName='RightScreen')
+# figs+=figlib.fig_grid(AreaName='TopRight',ScreenName='RightScreen')
 plt.show()
 ##
-##pop,pop_init,best_ind=main(nBase=nGenes*nBasePerGene,nInd=10,CXPB=0.5,MUTPB=0.9,nIterMax=100,nPerTournament=2);
-##pop,pop_init,best_ind=main(nBase=nGenes*nBasePerGene,nInd=30,CXPB=0.5,MUTPB=0.5,nIterMax=100,nPerTournament=2);
-
-
-#individualPlot(neutral,fig1=figs[0],fig2=figs[1])
-
-
-# --- GA
-creator.create("Fitness", base.Fitness, weights=objectiveWeights)
-creator.create("Individual", list, fitness=creator.Fitness)
-pop,best_ind=main(nBase=nGenes*nBasePerGene
-          ,nInd=4,nIndSelect=2,CXPB=0.5,MUTPB=0.5
-#           ,nInd=32,nIndSelect=16,CXPB=0.5,MUTPB=0.5
-#          ,MutMethod='PolyBound',MutParam1=0.001,nPerTournament=2
-           ,MutMethod='UniBound',MutParam1=np.nan,nPerTournament=2
-#           ,MutMethod='GaussianBound',MutParam1=0.01,nPerTournament=2
-          ,nIterMax=100);
-
-###
-#neutral=getNeutralChromosome();
-#individualPlot(neutral,fig1=figs[0],fig2=figs[1])
-
 # 
+# 
+# --- Parametric GA
+parameticGA(CH_MAP,[2,3,4,5])
+
+# --- Full GA
+# creator.create("Fitness", base.Fitness, weights=objectiveWeights)
+# creator.create("Individual", list, fitness=creator.Fitness)
+# pop,best_ind=mainGA(nBase=CH_MAP.nBases
+#           ,nInd=32,nIndSelect=16,CXPB=0.5,MUTPB=0.5
+# #           ,nInd=32,nIndSelect=16,CXPB=0.5,MUTPB=0.5
+# #          ,MutMethod='PolyBound',MutParam1=0.001,nPerTournament=2
+# #            ,MutMethod='UniBound',MutParam1=np.nan,nPerTournament=2
+#           ,MutMethod='GaussianBound',MutParam1=0.01,nPerTournament=2
+#           ,nIterMax=100);
+# 
+###
+# #neutral=getNeutralChromosome();
+# #individualPlot(neutral,fig1=figs[0],fig2=figs[1])
+##pop,pop_init,best_ind=main(nBase=,nInd=10,CXPB=0.5,MUTPB=0.9,nIterMax=100,nPerTournament=2);
+##pop,pop_init,best_ind=main(nBase=,nInd=30,CXPB=0.5,MUTPB=0.5,nIterMax=100,nPerTournament=2);
+#individualPlot(neutral,fig1=figs[0],fig2=figs[1])
+# 
+# # 

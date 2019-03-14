@@ -103,14 +103,12 @@ def templateReplace(template_dir, PARAMS, workdir=None, main_file=None, name_fun
         workdir=template_dir+'_Parametric'
 
     # Copying template folder to workdir
-    print(template_dir, '  ',workdir)
     if os.path.exists(workdir) and RemoveAllowed:
         rmtree(workdir)
     distutils.dir_util.copy_tree(template_dir, workdir)
     #copytree(template_dir, workdir, ignore=ignore_patterns('.git'))
     removeFASTOuputs(workdir)
 
-    print('Generating fast input files...')
     # --- Fast main file use as "master"
     if main_file is None:
         FstFiles=set(glob.glob(os.path.join(template_dir,'*.fst'))+glob.glob(os.path.join(template_dir,'*.FST')))

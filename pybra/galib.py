@@ -17,6 +17,127 @@ import re
 import pandas as pd
 import pdb
 
+# --------------------------------------------------------------------------------}
+# --- Gene MAP
+# --------------------------------------------------------------------------------{
+class GeneMap():
+    def __init__(self,name,nBases,protein_ranges,kind=None,protein_neutr=None,meta=None):
+        """
+        A gene is between 0 and 1 
+        A protein is defined by the ranges
+        """
+        self.name   = name
+        self.nBases = nBases
+        self.kind   = kind
+        self.protein_ranges = protein_ranges
+        self.protein_neutr  = protein_neutr
+        if protein_neutr is None:
+            self.protein_neutr=[(m+M)/2 for m,M in protein_ranges]
+        self.meta  = meta
+
+    def __repr__(self):
+        s=''.join(['x']*self.nBases)+': '+self.name+'\n'
+        return s
+
+    def decode(self,gene):
+        prot =[]
+        for g,pr in zip(gene,self.protein_ranges):
+            p=pr[0]+ g*(pr[1]-pr[0])
+            prot.append(p)
+            if g<0 or g>1:
+                print('g:',g, 'pr:',pr, ' -> p:',p)
+                raise Exception('The gene cannot be decoded properly')
+        return prot
+
+    def encode(self,protein):
+        gene=[]
+        for p,pr in zip(protein,self.protein_ranges):
+            g=(p-pr[0])/(pr[1]-pr[0])
+            gene.append(g)
+            if g>1 or g<0:
+                print('p:',p, 'pr:',pr, ' -> g:',g)
+                raise Exception('The protein cannot be encoded properly')
+        return gene
+
+    def neutralProtein(self):
+        return self.protein_neutr
+
+    def show_full_raw(self,gene):
+        s='['+' '.join([str(b) for b in gene])+']: '+self.name
+        return s
+
+    def show_full(self,gene):
+        if self.nBases>1:
+            s=self.name+': ['+' '.join([str(b) for b in self.decode(gene)])+']'
+        else:
+            s=self.name+': '+str(self.decode(gene)[0])
+        return s
+
+class ChromosomeMap(list):
+    def add(self,d):
+        self.append(d)
+
+    def append(self,d):
+        super(ChromosomeMap,self).append(d)
+        # TODO check that 
+        if not isinstance(d,GeneMap):
+            raise Exception('Can only add `GenMap` types')
+
+    @property
+    def nBases(self):
+        return sum([gene.nBases for gene in self])
+
+    @property
+    def nGenes(self):
+        return len(self)
+
+    def maxNBasesPerGene(self):
+        return max([gene.nBases for gene in self])
+
+    def neutralChromosome(self):
+        v=[]
+        for gm in self:
+            v+=gm.encode(gm.protein_neutr)
+        return v
+
+    def neutralProtein(self):
+        v=[]
+        for gm in self:
+            v+=gm.protein_neutr
+        return v
+
+    def decode(self,chromosome):
+        v=[]
+        for gm,gene in zip(self,self.split(chromosome)):
+            v+=gm.decode(gene) 
+        return v
+
+    def encode(self,protein_chain):
+        v=[]
+        for gm,prot in zip(self,self.split(protein_chain)):
+            v+=gm.encode(prot) 
+        return v
+
+    def __repr__(self):
+        s=''
+        fmt='{:'+str(self.maxNBasesPerGene())+'s}'
+        for gm in self:
+            s+=fmt.format(''.join(['x']*gm.nBases))+': '+gm.name+'\n'
+        return s
+
+    def show_full(self,chromosome,sep='\n'):
+        s=''
+        for gm,gene in zip(self,self.split(chromosome)):
+            s+=gm.show_full(gene)+sep
+        return s
+
+    def split(self,chromosome):
+        genes=[]
+        n=0
+        for gm in self:
+            genes.append(chromosome[n:n+gm.nBases])
+            n=n+gm.nBases
+        return genes
 
 def nparray_hash(x,length=16):
    return hashlib.md5((x.tobytes())).hexdigest()[:length]
@@ -160,7 +281,7 @@ def populationLoad(filename=None, nFits=2):
     return df,pop
 
 
-def timelinePlot(df,fig):
+def timelinePlot(df,fig,noFit=True):
     if fig is None:
         fig=plt.figure(figsize=(5, 12));
     if len(fig.axes)==0:
@@ -169,9 +290,11 @@ def timelinePlot(df,fig):
     ax.clear()
     # shifting values for plottting
     numeric_cols = [col for col in df if df[col].dtype.kind != 'O']
+    if noFit:
+        numeric_cols = [col for col in numeric_cols if col.find('Fit')!=0]
     for i,c in enumerate(numeric_cols):
         df[c]= df[c] + len(numeric_cols)-i-1
-    df.plot(ax=ax)
+    df[numeric_cols].plot(ax=ax)
     for i in range(len(numeric_cols)):
         ax.plot([0,len(df)],[i,i],'k--');
     ax.legend(loc='center left', bbox_to_anchor=(1.0, 0.5));

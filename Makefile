@@ -13,6 +13,8 @@ d:
 
 p:
 	_FastView.bat ../hubData.csv
+test:
+	python -m unittest discover
 
 # 	_FastView.bat ../OpenFAST_V27_Power_PowerCurve/Turbine_ws10.0.out
 # 	_FastView.bat ../wtgData.csv
