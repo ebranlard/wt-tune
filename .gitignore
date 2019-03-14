@@ -1,0 +1,4 @@
+*.pyc
+_GA*
+_Prepro/swiftData_All.csv
+_Prepro/swiftData_Half.csv
