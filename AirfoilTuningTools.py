@@ -13,6 +13,8 @@ import subprocess
 import time
 import pdb
 from pybra import pandalib
+from pybra import cmd
+import fastlib
 # import pandalib #
 
 
@@ -21,10 +23,7 @@ def prepare_run_folder(template_dir,sim_dir):
     # Copying template folder
     distutils.dir_util.copy_tree(template_dir, sim_dir)
     # Cleaning folder, just in case
-    for f in glob.glob(os.path.join(sim_dir,'*.out')):
-        os.remove(f)
-    for f in glob.glob(os.path.join(sim_dir,'*.ech')):
-        os.remove(f)
+    fastlib.removeFASTOuputs(sim_dir)
 
 def prepare_template_folder(ref_dir,workdir,airfoilFileNames,OPER,FAST):
     # Copying ref folder to workdir
@@ -209,45 +208,6 @@ def patch_airfoil_files(chromosome,airfoils_ref,airfoilFileNames,workdir=''):
     rewrite_airfoils(airfoils_mut,airfoilFileNames,workdir=workdir)
     return airfoils_mut
 
-def run_fast(input_file,exe,wait=True,debian=False):
-    if not os.path.isabs(input_file):
-        input_file=os.path.abspath(input_file)
-    if exe is None: 
-        exe = '../_Exe/OpenFAST2_x64s_ebra.exe'
-    if not os.path.exists(exe):
-        raise Exception('Executable not found: {}'.format(exe))
-    args= [exe,input_file]
-    if debian:
-        input_file=input_file.replace('C:','/mnt/c')
-        input_file=input_file.replace('Work','work')
-        input_file=input_file.replace('\\','/')
-        #print(input_file)
-        workdir  = os.path.dirname(input_file)
-        basename = os.path.basename(input_file)
-        args = ['debian', 'run', 'cd '+workdir+' && ./openfast '+basename]
-    FNULL = open(os.devnull, 'w')
-    if wait:
-        #p=subprocess.call(args)
-        p=subprocess.call(args, stdout=FNULL, stderr=subprocess.STDOUT)
-    else:
-        #p=subprocess.Popen(args)
-        p=subprocess.Popen(args, stdout=FNULL, stderr=subprocess.STDOUT)
-    return p
-
-def run_aerodyn(input_file,exe=None):
-    #if not os.path.isabs(input_file):
-    #    input_file=os.path.abspath(input_file)
-    if exe is None:
-        exe = '../_Exe/AeroDyn_Driver_Win32.exe'
-    if not os.path.exists(exe):
-        raise Exception('Executable not found: {}'.format(exe))
-    #print('Running',args)
-    FNULL = open(os.devnull, 'w')
-    #p=subprocess.call(args)
-    p=subprocess.call(args, stdout=FNULL, stderr=subprocess.STDOUT)
-    #p=subprocess.call(args, stdout=FNULL, stderr=subprocess.STDOUT)
-
-
 def run_sim(sim_dir,FAST,nSIM,exe=None):
     if FAST==1:
         files=glob.glob(os.path.join(sim_dir,'*.fst'))
@@ -255,12 +215,7 @@ def run_sim(sim_dir,FAST,nSIM,exe=None):
             raise Exception('No fast file found in sim folder: '+sim_dir)
         if len(files)!=nSIM:
             raise Exception('The number of fast files ({}) is not equal to nSIM ({}) in: {}'.format(len(files),nSIM,sim_dir))
-        ps=[]
-        for f in files:
-            ps.append(run_fast(f,exe,wait=False))
-
-        for p in ps:
-            p.wait()
+        cmd.run_cmds(files, exe, parallel=True, ShowOutputs=False)
     else:
         files=glob.glob(os.path.join(sim_dir,'*.dvr'))
         if len(files)==0:
@@ -273,8 +228,9 @@ def run_sim(sim_dir,FAST,nSIM,exe=None):
         bOK=False
         nTry=0
         while not bOK and nTry<10:
-            for f in files:
-                run_aerodyn(f,exe)
+            cmd.run_cmds(files, exe, parallel=True, ShowOutputs=False)
+            #for f in files:
+            #    run_aerodyn(f,exe)
             #run_aerodyn(files[0])
             outfiles=glob.glob(os.path.join(sim_dir,'*.out'))
             bOK=len(outfiles)==nSIM
