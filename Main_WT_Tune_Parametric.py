@@ -142,7 +142,7 @@ def exportBestData(best,best_dir_dest, RefValues=None, NeutralValues=None):
     with open(os.path.join(best_dir_dest,'chromosome.csv'),'w') as f:
         v=[best.data['ID']]+[v for v in best.fitness.values]+best
         sv = ', '.join([str(val) for val in v])
-        f.write(sv)
+        f.write(sv+'\n')
         f.write(CH_MAP.show_full(best))
     Vals=[]
     if RefValues is not None:
@@ -163,7 +163,7 @@ ref_dir = 'OpenFAST_V27_v2_forGA/'
 WS_SIM  = np.array([4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10])
 TIMEAVGWINDOW=None
 if platform.system()=='Linux':
-    EXE     = '_Exe/openfast'
+    EXE     = '_Exe/gcc'
 else:
     EXE     = '_Exe/OpenFAST2_x64s_ebra.exe'  ;
 RefFile = '_data/swiftData_Half_Binned.csv'
@@ -192,7 +192,7 @@ print('Neutral protein    :',CH_MAP.neutralProtein())
 print(CH_MAP)
 
 # --- Options for parametric run
-nValuesPerBase = 4 # <<<
+# nValuesPerBase = 4 # <<<
 GA_DIR  = '_GA_Parametric'
 
 # --------------------------------------------------------------------------------}
@@ -213,7 +213,7 @@ print(RefValues)
 # --- Parametric run and minimization
 # --------------------------------------------------------------------------------{
 # --- Parametric GA
-fits_norm,fits_arr,pop,v,vProt=galib.parameticGA(individualFitness,CH_MAP,nValuesPerBase,len(PerformanceSignals))
+fits_norm,fits_arr,pop,v,vProt=galib.parameticGA(individualFitness,CH_MAP,[4,4,8,4],len(PerformanceSignals))
 bnds     = tuple([(m+1.e-6,M-1e-6) for m,M in CH_MAP.chromosomeBounds()])
 print('Neutral chromosome:',CH_MAP.neutralChromosome())
 print('v',v)
