@@ -49,7 +49,15 @@ class TestGA(unittest.TestCase):
         self.assertEqual(GEN_MAP2.decode(0.5,iBase = 1), 2.5)
         self.assertEqual(CH_MAP.decode  (0.5,iBase = 0), 10)
         self.assertEqual(CH_MAP.decode  (0.5,iBase = 1), 20)
-        self.assertEqual(CH_MAP.decode  (0.5,iBase = 2), 2.0)
+        self.assertEqual(CH_MAP.decode  (0.5,iBase = 2), 2.5)
+
+        #GEN_MAP=galib.GeneMap(nBases=1, name='WS-2', protein_ranges=[[0,100]], resolution=1000)
+        #print(GEN_MAP.show_full([0]))
+        #print(GEN_MAP.show_full([0.001]))
+        #print(GEN_MAP.show_full([0.5]))
+        #print(GEN_MAP.show_full([1]))
+
+
 
 if __name__ == '__main__':
     unittest.main()

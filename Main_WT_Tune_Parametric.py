@@ -88,7 +88,7 @@ def genotype_to_FASTphenotype(chromosome):
 
 
 ### --- PARAMETERS
-def individualFitness(chromosome,outdir=None,ForceEvaluation=False):
+def individualFitness(chromosome,outdir=None,ForceEvaluation=False,stat=''):
     """ 
     Evaluate an individual.
     Global variable used so far: CH_MAP, WS_SIM, GA_DIR, TIMEAVGWINDOW, EXE, ref_dir
@@ -104,7 +104,7 @@ def individualFitness(chromosome,outdir=None,ForceEvaluation=False):
     chromosome.data['ID']   = ID
     chromosome.data['dir']  = sim_dir 
     #print('--- EVALUATING {} '.format(chromosome.data['ID']),end='')
-    print('--- EVALUATING {} '.format(CH_MAP.show_full(chromosome,'\t')),end='')
+    print('--- {}{} '.format(stat,CH_MAP.show_full(chromosome,' ')),end='')
     # Checking if all files are present and with non zero size in the sim folder
     outfiles = glob.glob(os.path.join(sim_dir,'*.out'))
     bFilesOK=False
@@ -121,11 +121,12 @@ def individualFitness(chromosome,outdir=None,ForceEvaluation=False):
         run_sim(sim_dir,FAST,len(WS_SIM),exe=EXE)
         print(' --- ', end='')
 
-    # Evaluating performances and fitnesses
+    ## Evaluating performances and fitnesses
     chromosome.data['perf'] = postpro_simdir(sim_dir, TimeAvgWindow = TIMEAVGWINDOW, FAST = FAST)
     perf_err,_ = get_perf_error(chromosome.data['perf'], PerformanceSignals, perf_ref=RefValues)
     fits = [v for v in perf_err.values]
     print(' Fit: ['+','.join(['{:5.2f}'.format(f) for f in fits])+' ]')
+    fits=[0,0,0]
     return fits
 
 
@@ -158,6 +159,7 @@ def exportBestData(best,best_dir_dest, RefValues=None, NeutralValues=None):
 # --- PARAMETER DEFINITIONS 
 # --------------------------------------------------------------------------------{
 ### --- PARAMETERS
+RESOLUTION = 1000; # resolution for variable range between min and max
 FAST=1
 ref_dir = 'OpenFAST_V27_v2_forGA/'
 WS_SIM  = np.array([4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10])
@@ -180,16 +182,17 @@ CH_MAP=galib.ChromosomeMap()
 #     gene_info=galib.GeneMap(nBases=3, kind='airfoil',name=af, meta=af_ref, protein_ranges=[[0,1],[0,1],[0,1]], protein_neutr=[0.5,0.5,0])
 #     CH_MAP.append(gene_info)
 # Fast params
-CH_MAP.add(galib.GeneMap(nBases=1, kind='fast_param', name='ServoFile|GenEff'  ,protein_ranges=[[90,100]]       , protein_neutr=[94] ))
-CH_MAP.add(galib.GeneMap(nBases=1, kind='fast_param', name='EDFile|GBoxEff'    ,protein_ranges=[[90,100]]       , protein_neutr=[94] ))
-CH_MAP.add(galib.GeneMap(nBases=1, kind='fast_param', name='ServoFile|VS_Rgn2K',protein_ranges=[[0.0003,0.0005]], protein_neutr=[0.00038245] ))
-CH_MAP.add(galib.GeneMap(nBases=1, kind='builtin', name='pitch',protein_ranges=[[-2,3]], protein_neutr=[0.0] ))
+CH_MAP.add(galib.GeneMap(nBases=1, kind='fast_param', name='ServoFile|GenEff'  ,protein_ranges=[[90,100]]       , protein_neutr=[94], resolution=RESOLUTION ))
+CH_MAP.add(galib.GeneMap(nBases=1, kind='fast_param', name='EDFile|GBoxEff'    ,protein_ranges=[[90,100]]       , protein_neutr=[94], resolution=RESOLUTION ))
+CH_MAP.add(galib.GeneMap(nBases=1, kind='fast_param', name='ServoFile|VS_Rgn2K',protein_ranges=[[0.0003,0.0005]], protein_neutr=[0.00038245], resolution=RESOLUTION ))
+CH_MAP.add(galib.GeneMap(nBases=1, kind='builtin', name='pitch',protein_ranges=[[-2,3]], protein_neutr=[0.0] , resolution=RESOLUTION))
 
 print('Number of Bases    :',CH_MAP.nBases)
 print('Number of Genes    :',CH_MAP.nGenes)
 print('Neutral chromosome :',CH_MAP.neutralChromosome())
 print('Neutral protein    :',CH_MAP.neutralProtein())
 print(CH_MAP)
+
 
 # --- Options for parametric run
 # nValuesPerBase = 4 # <<<
@@ -213,7 +216,7 @@ print(RefValues)
 # --- Parametric run and minimization
 # --------------------------------------------------------------------------------{
 # --- Parametric GA
-fits_norm,fits_arr,pop,v,vProt=galib.parameticGA(individualFitness,CH_MAP,[4,4,8,4],len(PerformanceSignals))
+fits_norm,fits_arr,pop,v,vProt=galib.parameticGA(individualFitness,CH_MAP,[4,4,4,4],len(PerformanceSignals), resolution=RESOLUTION)
 bnds     = tuple([(m+1.e-6,M-1e-6) for m,M in CH_MAP.chromosomeBounds()])
 print('Neutral chromosome:',CH_MAP.neutralChromosome())
 print('v',v)
