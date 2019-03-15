@@ -11,6 +11,9 @@ import math
 import pdb
 import distutils.dir_util
 
+from scipy.interpolate import RegularGridInterpolator
+from scipy.optimize import minimize
+
 from deap import base
 from deap import creator
 from deap import tools
@@ -55,12 +58,8 @@ def genotype_to_FASTphenotype(chromosome):
         p['EDFile|BlPitch(1)']     = pit
         p['EDFile|BlPitch(2)']     = pit
         p['EDFile|BlPitch(3)']     = pit
-        #p['EDFile|GBoxEff']        = 94.
-        #p['ServoFile|VS_Rgn2K']    = 0.00038245
-        #p['ServoFile|GenEff']      = 94.
         p['InflowFile|HWindSpeed'] = wsp
         p['InflowFile|WindType']   = 1 # Setting steady wind
-        #p['InflowFile|PLexp']      = 0.353 # 0.209
         for gm,gene in zip(CH_MAP, CH_MAP.split(chromosome)):
             if gm.kind=='fast_param':
                 p[gm.name]=gm.decode(gene)
@@ -88,15 +87,23 @@ def genotype_to_FASTphenotype(chromosome):
 
 
 ### --- PARAMETERS
-def individualFitness(chromosome):
+def individualFitness(chromosome,outdir=None,ForceEvaluation=False):
+    """ 
+    Evaluate an individual.
+    Global variable used so far: CH_MAP, WS_SIM, GA_DIR, TIMEAVGWINDOW, EXE, ref_dir
+    
+    """
     # Basic data
     ID      = galib.chromID(chromosome)
-    sim_dir = os.path.normpath(os.path.join(ref_dir,'..',GA_DIR,''+ID))
+    if outdir is not None:
+        sim_dir = outdir
+    else:
+        sim_dir = os.path.normpath(os.path.join(ref_dir,'..',GA_DIR,''+ID))
     chromosome.data = dict()
     chromosome.data['ID']   = ID
     chromosome.data['dir']  = sim_dir 
     #print('--- EVALUATING {} '.format(chromosome.data['ID']),end='')
-    print('--- EVALUATING {} '.format(CH_MAP.show_full(chromosome,' ')),end='')
+    print('--- EVALUATING {} '.format(CH_MAP.show_full(chromosome,'\t')),end='')
     # Checking if all files are present and with non zero size in the sim folder
     outfiles = glob.glob(os.path.join(sim_dir,'*.out'))
     bFilesOK=False
@@ -104,7 +111,7 @@ def individualFitness(chromosome):
         bFilesOK=True
         for fo in outfiles:
             bFilesOK=bFilesOK and os.stat(fo).st_size > 0
-    if os.path.exists(sim_dir) and bFilesOK:
+    if os.path.exists(sim_dir) and bFilesOK and (not ForceEvaluation):
         # No need to rerun
         print(' >>> ', end='') 
     else:
@@ -187,9 +194,6 @@ def populationPlot(pop,stats=None,fits=None,fig=None,kind='new',title=None):
         # we don't care about fitness
         for j,p in enumerate(pop):
             for i in range(len(p)):
-                #iBase=i % 3
-                #iGene = i/3
-                #XYC[c,0]=iBase*nGenes+iGene +j*SpreadFact/nInd
                 XYC[c,0]=i
                 XYC[c,1]=p[i]
                 c += 1
@@ -202,9 +206,6 @@ def populationPlot(pop,stats=None,fits=None,fig=None,kind='new',title=None):
 
         for p,f,j in zip(pop,fits,range(nInd)):
             for i in range(len(p)):
-                #iBase=i % 3
-                #iGene = i/3
-                #XYC[c,0]=iBase*nGenes+iGene +j*0.2/nInd
                 XYC[c,0]=i
                 XYC[c,1]=p[i]
                 XYC[c,2]=1-sum(f)
@@ -289,15 +290,30 @@ def getRandomPop(n=3):
     toolbox.register("population", tools.initRepeat, list, toolbox.individual)
     return toolbox.population(n=n)
 
-def getNeutralChromosome():
+def evalNeutralChromosome(outdir=None,ForceEvaluation=False):
     print('Neutral chromosome...')
-    toolbox = base.Toolbox()
-    toolbox.register("attr_float" , random.random)
-    toolbox.register("individual", tools.initRepeat, creator.Individual, toolbox.attr_float, CH_MAP.nBases)
-    neutral=toolbox.individual()
+    neutral=galib.Indiv()
     neutral[:]=CH_MAP.neutralChromosome()
-    neutral.fitness.values=individualFitness(neutral)
-    return neutral
+    neutral.fitness.values=individualFitness(neutral,outdir=outdir,ForceEvaluation=ForceEvaluation)
+    NeutralValues=neutral.data['perf']
+    NeutralValues.columns=[c+'_ori' for c in NeutralValues.columns.values]
+    return neutral,NeutralValues
+
+def exportBestData(best,best_dir_dest, RefValues=None, NeutralValues=None):
+    with open(os.path.join(best_dir_dest,'chromosome.csv'),'w') as f:
+        v=[best.data['ID']]+[v for v in best.fitness.values]+best
+        sv = ', '.join([str(val) for val in v])
+        f.write(sv)
+        f.write(CH_MAP.show_full(best))
+    Vals=[]
+    if RefValues is not None:
+        Vals+=[RefValues]
+    Vals+=[best.data['perf']]
+    if NeutralValues is not None:
+        Vals+=[NeutralValues]
+    #df = pd.concat([RefValuesNewCol,best.data['perf']],axis=1)
+    df = pd.concat(Vals,axis=1)
+    df.to_csv(os.path.join(best_dir_dest,'Results.csv'),index=False)
 
 
 def mainGA(nBase=2,nInd=10,nIndSelect=10,CXPB=0.3,MUTPB=0.3,nIterMax=100,nPerTournament=2,MutStep=0.1,MutMethod='PolyBound',CXFunction=tools.cxTwoPoint, MutParam1=0.05):
@@ -327,13 +343,12 @@ def mainGA(nBase=2,nInd=10,nIndSelect=10,CXPB=0.3,MUTPB=0.3,nIterMax=100,nPerTou
     toolbox.register("select"  , tools.selSPEA2)
 
     # Create and Evaluate the neutral chromosom
-    neutral_ori=getNeutralChromosome()
-    # Put neutral in dedicateed directory
-    neutral_dir_src  = os.path.normpath(os.path.join(ref_dir,'..',GA_DIR,''+neutral_ori.data['ID']))
     neutral_dir_dest = os.path.normpath(os.path.join(ref_dir,'..',GA_DIR,'_Neutral'))
-    distutils.dir_util.copy_tree(neutral_dir_src, neutral_dir_dest)
-    NeutralValues=neutral_ori.data['perf']
-    NeutralValues.columns=[c+'_ori' for c in NeutralValues.columns.values]
+    neutral_ori,NeutralValues=evalNeutralChromosome(outdir=neutral_dir_dest)
+    # Put neutral in dedicateed directory
+    #neutral_dir_src  = os.path.normpath(os.path.join(ref_dir,'..',GA_DIR,''+neutral_ori.data['ID']))
+    #neutral_dir_dest = os.path.normpath(os.path.join(ref_dir,'..',GA_DIR,'_Neutral'))
+    #distutils.dir_util.copy_tree(neutral_dir_src, neutral_dir_dest)
 
     # create an initial population
     pop = toolbox.population(n=nInd)
@@ -423,7 +438,7 @@ def mainGA(nBase=2,nInd=10,nIndSelect=10,CXPB=0.3,MUTPB=0.3,nIterMax=100,nPerTou
             sv = ', '.join([str(val) for val in v])
             f.write(sv)
             f.write(CH_MAP.show_full(best))
-        df = pd.concat([RefValuesNewCol,best.data['perf'],NeutralValues,],axis=1)
+        df = pd.concat([RefValuesNewCol,best.data['perf'],NeutralValues],axis=1)
         df.to_csv(os.path.join(best_dir_dest,'Results.csv'),index=False)
 
         # --- STATS
@@ -461,33 +476,6 @@ def mainGA(nBase=2,nInd=10,nIndSelect=10,CXPB=0.3,MUTPB=0.3,nIterMax=100,nPerTou
         print(">>>>>>>>>>>>>> Maximum number of iterations reached")
 
     return pop,best
-
-def parameticGA(ch_map,nPerBase):
-    class Indiv(list):
-        pass
-    nBases=ch_map.nBases
-    if isinstance(nPerBase,list):
-        if len(nPerBase)!=nBases:
-            raise Exception('IF nPerBase is a list it must be the same length as the number of bases')
-    else:
-        nPerBase= [nPerBase]*nBases
-
-    nTot       = np.prod(nPerBase)
-    nValuesCum = np.insert(np.cumprod(nPerBase),0,1)[:-1];
-    vBaseValues=[np.linspace(0,1,n) for n in nPerBase]
-    
-    print('Creating population of {} individuals...'.format(nTot))
-    pop=[]
-    for i in range(nTot):
-        Indexes=(np.mod(np.floor(i/nValuesCum),nPerBase)).astype(int);
-        chromosome=Indiv([vBaseValues[j][Indexes[j]] for j in range(nBases) ])
-        #print(i,Indexes,chromosome)
-        pop.append(chromosome)
-    print('Evaluating population...')
-    fits=[]
-    for p in pop:
-        fits.append(individualFitness(p))
-    return fits,pop
 
 
 # --------------------------------------------------------------------------------}
@@ -535,7 +523,6 @@ CH_MAP.add(galib.GeneMap(nBases=1, kind='builtin', name='pitch',protein_ranges=[
 
 
 
-nBasePerGene=3
 
 bEnforceBests=True
 bEnforceNeutral=False
@@ -578,31 +565,26 @@ RefValuesNewCol.columns=[c+'_ref' for c in RefValues.columns.values]
 print('Simulations:')
 print(RefValues)
 ### --- INIT
-# print('- Preparing template folder')
-# prepare_template_folder(ref_dir,template_dir,airfoilFileNames,RefValues,FAST)
-plt.ion()
+# plt.ion()
 figs=[]
 # figs+=figlib.fig_grid(AreaName='Left',ScreenName='RightScreen')
 # # figs+=figlib.fig_grid(2,1,AreaName='Right',ScreenName='RightScreen')
 # figs+=figlib.fig_grid(AreaName='TopRight',ScreenName='RightScreen')
-plt.show()
+# plt.show()
 ##
 # 
-# 
-# --- Parametric GA
-parameticGA(CH_MAP,[2,3,4,5])
 
 # --- Full GA
-# creator.create("Fitness", base.Fitness, weights=objectiveWeights)
-# creator.create("Individual", list, fitness=creator.Fitness)
-# pop,best_ind=mainGA(nBase=CH_MAP.nBases
+creator.create("Fitness", base.Fitness, weights=objectiveWeights)
+creator.create("Individual", list, fitness=creator.Fitness)
+pop,best_ind=mainGA(nBase=CH_MAP.nBases
+          ,nInd=32,nIndSelect=16,CXPB=0.5,MUTPB=0.5
 #           ,nInd=32,nIndSelect=16,CXPB=0.5,MUTPB=0.5
-# #           ,nInd=32,nIndSelect=16,CXPB=0.5,MUTPB=0.5
-# #          ,MutMethod='PolyBound',MutParam1=0.001,nPerTournament=2
-# #            ,MutMethod='UniBound',MutParam1=np.nan,nPerTournament=2
-#           ,MutMethod='GaussianBound',MutParam1=0.01,nPerTournament=2
-#           ,nIterMax=100);
-# 
+#          ,MutMethod='PolyBound',MutParam1=0.001,nPerTournament=2
+#            ,MutMethod='UniBound',MutParam1=np.nan,nPerTournament=2
+          ,MutMethod='GaussianBound',MutParam1=0.01,nPerTournament=2
+          ,nIterMax=100);
+
 ###
 # #neutral=getNeutralChromosome();
 # #individualPlot(neutral,fig1=figs[0],fig2=figs[1])

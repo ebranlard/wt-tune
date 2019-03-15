@@ -33,7 +33,23 @@ class TestGA(unittest.TestCase):
         self.assertEqual(CH_MAP.neutralProtein(),[10,10])
         neutr=CH_MAP.neutralProtein()
         self.assertEqual(neutr,CH_MAP.decode(CH_MAP.encode(neutr)))
+
         
+        GEN_MAP2=galib.GeneMap(nBases=2, name='RPM-PITCH', protein_ranges=[[15,25],[0,5]], protein_neutr=[20,0])
+        self.assertEqual(GEN_MAP2.geneBounds(),[(0,1),(0,1)])
+        self.assertEqual(GEN_MAP2.proteinBounds(),[(15,25),(0,5)])
+
+        CH_MAP=galib.ChromosomeMap()
+        CH_MAP.add(GEN_MAP)
+        CH_MAP.add(GEN_MAP2)
+        self.assertEqual(CH_MAP.chromosomeBounds(),[(0,1),(0,1),(0,1)])
+        self.assertEqual(CH_MAP.proteinChainBounds(),[(5,15),(15,25),(0,5)])
  
+        self.assertEqual(GEN_MAP2.decode(0.5,iBase = 0), 20)
+        self.assertEqual(GEN_MAP2.decode(0.5,iBase = 1), 2.5)
+        self.assertEqual(CH_MAP.decode  (0.5,iBase = 0), 10)
+        self.assertEqual(CH_MAP.decode  (0.5,iBase = 1), 20)
+        self.assertEqual(CH_MAP.decode  (0.5,iBase = 2), 2.0)
+
 if __name__ == '__main__':
     unittest.main()

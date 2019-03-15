@@ -17,6 +17,14 @@ import re
 import pandas as pd
 import pdb
 
+class Fitn():
+    pass
+
+class Indiv(list):
+    def __init__(self, *args):
+        list.__init__(self, *args)
+        self.fitness=Fitn()
+        self.fitness.values=[]
 # --------------------------------------------------------------------------------}
 # --- Gene MAP
 # --------------------------------------------------------------------------------{
@@ -39,14 +47,22 @@ class GeneMap():
         s=''.join(['x']*self.nBases)+': '+self.name+'\n'
         return s
 
-    def decode(self,gene):
-        prot =[]
-        for g,pr in zip(gene,self.protein_ranges):
-            p=pr[0]+ g*(pr[1]-pr[0])
-            prot.append(p)
+    def decode(self,gene,iBase=None):
+        if iBase is None:
+            prot =[]
+            for g,pr in zip(gene,self.protein_ranges):
+                p=pr[0]+ g*(pr[1]-pr[0])
+                prot.append(p)
+                if g<0 or g>1:
+                    print('g:',g, 'pr:',pr, ' -> p:',p)
+                    raise Exception('The gene cannot be decoded properly')
+        else:
+            g=gene
+            pr=self.protein_ranges[iBase]
+            prot=pr[0]+ g*(pr[1]-pr[0])
             if g<0 or g>1:
-                print('g:',g, 'pr:',pr, ' -> p:',p)
-                raise Exception('The gene cannot be decoded properly')
+                print('g:',g, 'pr:',pr, ' -> p:',prot)
+                raise Exception('The base cannot be decoded properly')
         return prot
 
     def encode(self,protein):
@@ -72,6 +88,14 @@ class GeneMap():
         else:
             s=self.name+': '+str(self.decode(gene)[0])
         return s
+
+    def geneBounds(self):
+        return [(0,1)]*self.nBases
+
+    def proteinBounds(self):
+        return [(m,M) for m,M in self.protein_ranges]
+
+
 
 class ChromosomeMap(list):
     def add(self,d):
@@ -106,10 +130,23 @@ class ChromosomeMap(list):
             v+=gm.protein_neutr
         return v
 
-    def decode(self,chromosome):
-        v=[]
-        for gm,gene in zip(self,self.split(chromosome)):
-            v+=gm.decode(gene) 
+    def decode(self,chromosome,iBase=None):
+        if iBase is None:
+            v=[]
+            for gm,gene in zip(self,self.split(chromosome)):
+                v+=gm.decode(gene) 
+        else:
+            if iBase>=self.nBases:
+                raise Exception('iBase should be between 0 and nBases')
+            i=0
+            for ig,gm in enumerate(self):
+                if (iBase>=i) and (iBase<i+gm.nBases):
+                    break
+                else:
+                    i+=gm.nBases
+            iBase=iBase-i
+            #print('New iBase: {} for gene: {} {}'.format(iBase,ig,gm))
+            v=gm.decode(chromosome,iBase)
         return v
 
     def encode(self,protein_chain):
@@ -117,6 +154,19 @@ class ChromosomeMap(list):
         for gm,prot in zip(self,self.split(protein_chain)):
             v+=gm.encode(prot) 
         return v
+
+    def chromosomeBounds(self):
+        v=[]
+        for gm in self:
+            v+=gm.geneBounds() 
+        return v
+
+    def proteinChainBounds(self):
+        v=[]
+        for gm in self:
+            v+=gm.proteinBounds() 
+        return v
+
 
     def __repr__(self):
         s=''
@@ -139,11 +189,56 @@ class ChromosomeMap(list):
             n=n+gm.nBases
         return genes
 
+# --------------------------------------------------------------------------------}
+# --- ID  
+# --------------------------------------------------------------------------------{
 def nparray_hash(x,length=16):
    return hashlib.md5((x.tobytes())).hexdigest()[:length]
 
 def chromID(p):
     return nparray_hash(np.array(p),length=32)
+
+# --------------------------------------------------------------------------------}
+# --- Parametric 
+# --------------------------------------------------------------------------------{
+def parameticGA(fitnessEvalFun,ch_map,nPerBase,nFitness):
+    """ 
+        Perform a parametric study using the same formalism of the Genetic algorithm
+        Each base is varies between 0 and 1 as defined by `nPerBase` (a list of values for each base or a single value)
+        The function fitnessEvalFun is evaluated on the population
+    
+    """
+    nBases=ch_map.nBases
+    if isinstance(nPerBase,list):
+        if len(nPerBase)!=nBases:
+            raise Exception('If nPerBase is a list it must be the same length as the number of bases')
+    else:
+        nPerBase= [nPerBase]*nBases
+
+    nTot       = np.prod(nPerBase)
+    nValuesCum = np.insert(np.cumprod(nPerBase),0,1)[:-1];
+    vBaseValues=[np.linspace(0,1,n) for n in nPerBase]
+    vProtValues=[np.array([ch_map.decode(g,iBase=j) for g in v]) for j,v in enumerate(vBaseValues)]
+
+    fits_arr  = np.zeros( tuple(nPerBase+[nFitness] ) )
+    fits_norm = np.zeros( tuple(nPerBase) )
+    ValFit    = np.zeros( tuple(nPerBase) )
+    
+    print('Creating population of {} individuals...'.format(nTot))
+    pop=[]
+    for i in range(nTot):
+        Indexes=(np.mod(np.floor(i/nValuesCum),nPerBase)).astype(int);
+        chromosome=Indiv([vBaseValues[j][Indexes[j]] for j in range(nBases) ])
+        #print(i,Indexes,chromosome)
+        pop.append(chromosome)
+
+    print('Evaluating population...')
+    for i,p in enumerate(pop):
+        Indexes=tuple((np.mod(np.floor(i/nValuesCum),nPerBase)).astype(int));
+        fits = fitnessEvalFun(p)
+        fits_norm[Indexes] = np.linalg.norm(fits)
+        fits_arr [Indexes] = fits
+    return fits_norm,fits_arr,pop,vBaseValues,vProtValues
 
 # --------------------------------------------------------------------------------}
 # --- Population/individual manipulations
