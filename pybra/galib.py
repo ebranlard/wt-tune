@@ -29,7 +29,7 @@ class Indiv(list):
 # --- Gene MAP
 # --------------------------------------------------------------------------------{
 class GeneMap():
-    def __init__(self,name,nBases,protein_ranges,kind=None,protein_neutr=None,meta=None):
+    def __init__(self,name,nBases,protein_ranges,kind=None,protein_neutr=None,meta=None,resolution=1000):
         """
         A gene is between 0 and 1 
         A protein is defined by the ranges
@@ -42,6 +42,7 @@ class GeneMap():
         if protein_neutr is None:
             self.protein_neutr=[(m+M)/2 for m,M in protein_ranges]
         self.meta  = meta
+        self.resolution  = resolution
 
     def __repr__(self):
         s=''.join(['x']*self.nBases)+': '+self.name+'\n'
@@ -83,10 +84,37 @@ class GeneMap():
         return s
 
     def show_full(self,gene):
+        def pretty_name(n):
+            if n.find('|')>0:
+                s=n.split('|')
+                return s[-1]
+            else:
+                return n
+
+        def pretty(b,pr):
+            delta=pr[1]-pr[0]
+            if delta>0:
+                nDec=int(np.log10(delta/self.resolution))
+                nInt=int(np.log10(pr[1]))
+                if nInt<0:
+                    nInt=-1
+                if nDec<0:
+                    fmt='{:'+str(nInt-nDec+3)+'.'+str(-nDec+1)+'f}'
+                    #print(fmt)
+                    return fmt.format(b)
+                elif nInt>0:
+                    fmt='{:'+str(nInt+1)+'.0f}'
+                    #print(fmt)
+                    return fmt.format(b)
+                else:
+                    return str(b)
+            else:
+                return str(b)
+        
         if self.nBases>1:
-            s=self.name+': ['+' '.join([str(b) for b in self.decode(gene)])+']'
+            s=pretty_name(self.name)+': ['+' '.join([pretty(b,rg) for b,rg in zip(self.decode(gene),self.protein_ranges)])+']'
         else:
-            s=self.name+': '+str(self.decode(gene)[0])
+            s=pretty_name(self.name)+': '+pretty(self.decode(gene)[0],self.protein_ranges[0])
         return s
 
     def geneBounds(self):
@@ -201,11 +229,13 @@ def chromID(p):
 # --------------------------------------------------------------------------------}
 # --- Parametric 
 # --------------------------------------------------------------------------------{
-def parameticGA(fitnessEvalFun,ch_map,nPerBase,nFitness):
+def parameticGA(fitnessEvalFun,ch_map,nPerBase,nFitness,resolution=None):
     """ 
         Perform a parametric study using the same formalism of the Genetic algorithm
         Each base is varies between 0 and 1 as defined by `nPerBase` (a list of values for each base or a single value)
-        The function fitnessEvalFun is evaluated on the population
+        The function `fitnessEvalFun` is evaluated on the population
+
+        `resolution` should be a power of 10, like 10, 100, 1000
     
     """
     nBases=ch_map.nBases
@@ -218,7 +248,23 @@ def parameticGA(fitnessEvalFun,ch_map,nPerBase,nFitness):
     nTot       = np.prod(nPerBase)
     nValuesCum = np.insert(np.cumprod(nPerBase),0,1)[:-1];
     vBaseValues=[np.linspace(0,1,n) for n in nPerBase]
+    print('Parametric values (no rounding:)')
+    for v in vBaseValues:
+        print(v)
     vProtValues=[np.array([ch_map.decode(g,iBase=j) for g in v]) for j,v in enumerate(vBaseValues)]
+    print('Prot values (no rounding:)')
+    for v in vProtValues:
+        print(v)
+    if resolution:
+        vBaseValues=[np.round(resolution*np.linspace(0,1,n))/resolution for n in nPerBase]
+        print('Parametric values (with rounding:)')
+        for v in vBaseValues:
+            print(v)
+        # we scale 
+        print('Prot values (with rounding:)')
+        vProtValues=[np.array([ch_map.decode(g,iBase=j) for g in v]) for j,v in enumerate(vBaseValues)]
+        for v in vProtValues:
+            print(v)
 
     fits_arr  = np.zeros( tuple(nPerBase+[nFitness] ) )
     fits_norm = np.zeros( tuple(nPerBase) )
@@ -235,7 +281,7 @@ def parameticGA(fitnessEvalFun,ch_map,nPerBase,nFitness):
     print('Evaluating population...')
     for i,p in enumerate(pop):
         Indexes=tuple((np.mod(np.floor(i/nValuesCum),nPerBase)).astype(int));
-        fits = fitnessEvalFun(p)
+        fits = fitnessEvalFun(p,stat='{:4.1f}% - '.format(100.0*i/nTot))
         fits_norm[Indexes] = np.linalg.norm(fits)
         fits_arr [Indexes] = fits
     return fits_norm,fits_arr,pop,vBaseValues,vProtValues
