@@ -1,5 +1,6 @@
 all:
-	python Main_WT_Tune_Parametric.py
+	python Main_WT_Tune_GA_TorqueFlap.py
+# 	python Main_WT_Tune_Parametric.py
 # 	#ipython Main_AirfoilTuning_GA_TorqueFlap.py
 #	ipython PowerCurve.py
 # 	$u,ccipython Main_AirfoilTuning_GA.py

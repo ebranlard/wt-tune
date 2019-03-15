@@ -18,45 +18,45 @@ import weio
 import fastlib
 
 
-def prepare_run_folder(template_dir,sim_dir):
-    # Copying template folder
-    distutils.dir_util.copy_tree(template_dir, sim_dir)
-    # Cleaning folder, just in case
-    fastlib.removeFASTOuputs(sim_dir)
-
-def prepare_template_folder(ref_dir,workdir,airfoilFileNames,OPER,FAST):
-    def naming(p):
-        return '_{:02.0f}'.format(p['InflowFile|HWindSpeed'])
-
-    PARAMS=[]
-    for wsp,rpm,pit in zip(OPER['WS'],OPER['RPM'],OPER['Pitch']):
-        p=dict()
-        if wsp<6:
-            p['FAST|TMax']         = 8
-        elif wsp<9:
-            p['FAST|TMax']         = 6
-        else:
-            p['FAST|TMax']         = 4
-        p['FAST|DT']               = 0.01
-        p['FAST|DT_Out']           = 0.1
-        p['FAST|OutFileFmt']       = 1 # TODO
-        p['EDFile|RotSpeed']       = rpm
-        p['EDFile|BlPitch(1)']     = pit
-        p['EDFile|BlPitch(2)']     = pit
-        p['EDFile|BlPitch(3)']     = pit
-        p['EDFile|GBoxEff']        = 94.
-        p['ServoFile|VS_Rgn2K']    = 0.00038245
-        p['ServoFile|GenEff']      = 94.
-        p['InflowFile|HWindSpeed'] = wsp
-        p['InflowFile|WindType']   = 1 # Setting steady wind
-        p['InflowFile|PLexp']      = 0.353 # 0.209
-        PARAMS.append(p)
-
-    fastlib.templateReplace(ref_dir,PARAMS,workdir=workdir,name_function=naming,RemoveRefSubFiles=True)
-    # --- Rewriting the airfoil files, purely to reduce diff
-    for f in airfoilFileNames:
-        AF=weio.FASTInFile(os.path.join(workdir,f))
-        AF.write();
+# def prepare_run_folder(template_dir,sim_dir):
+#     # Copying template folder
+#     distutils.dir_util.copy_tree(template_dir, sim_dir)
+#     # Cleaning folder, just in case
+#     fastlib.removeFASTOuputs(sim_dir)
+# # 
+# def prepare_template_folder(ref_dir,workdir,airfoilFileNames,OPER,FAST):
+#     def naming(p):
+#         return '_{:02.0f}'.format(p['InflowFile|HWindSpeed'])
+# 
+#     PARAMS=[]
+#     for wsp,rpm,pit in zip(OPER['WS'],OPER['RPM'],OPER['Pitch']):
+#         p=dict()
+#         if wsp<6:
+#             p['FAST|TMax']         = 8
+#         elif wsp<9:
+#             p['FAST|TMax']         = 6
+#         else:
+#             p['FAST|TMax']         = 4
+#         p['FAST|DT']               = 0.01
+#         p['FAST|DT_Out']           = 0.1
+#         p['FAST|OutFileFmt']       = 1 # TODO
+#         p['EDFile|RotSpeed']       = rpm
+#         p['EDFile|BlPitch(1)']     = pit
+#         p['EDFile|BlPitch(2)']     = pit
+#         p['EDFile|BlPitch(3)']     = pit
+#         p['EDFile|GBoxEff']        = 94.
+#         p['ServoFile|VS_Rgn2K']    = 0.00038245
+#         p['ServoFile|GenEff']      = 94.
+#         p['InflowFile|HWindSpeed'] = wsp
+#         p['InflowFile|WindType']   = 1 # Setting steady wind
+#         p['InflowFile|PLexp']      = 0.353 # 0.209
+#         PARAMS.append(p)
+# 
+#     fastlib.templateReplace(ref_dir,PARAMS,workdir=workdir,name_function=naming,RemoveRefSubFiles=True)
+#     # --- Rewriting the airfoil files, purely to reduce diff
+#     for f in airfoilFileNames:
+#         AF=weio.FASTInFile(os.path.join(workdir,f))
+#         AF.write();
 
 def read_airfoils(airfoilFileNames,workdir=''):
     airfoils=[]
@@ -155,26 +155,26 @@ def patch_airfoil(gene,af):
     af['polar'][:,2] =  af['polar'][:,2]+DeltaCd
     return af
 
-def patch_airfoils(chromosome,airfoils_ref):
-    new_airfoils=copy.deepcopy(airfoils_ref)
-    genes = np.array_split(chromosome,len(airfoils_ref))
-    for [af,gn] in zip(new_airfoils,genes):
-        af = patch_airfoil(gn,af)
-    return new_airfoils
-
-def rewrite_airfoils(airfoils,airfoilFileNames,workdir=''):
-    # Reading the files, chainging the polars and rewriting
-    for af,f in zip(airfoils,airfoilFileNames):
-        #print('Rewriting {}'.format(os.path.join(workdir,f)))
-        AF = weio.FASTInFile(os.path.join(workdir,f))
-        AF['AFCoeff'] = af['polar']
-        AF.write()
-
-def patch_airfoil_files(chromosome,airfoils_ref,airfoilFileNames,workdir=''):
-    ### --- Create hacked airfoil data
-    airfoils_mut=patch_airfoils(chromosome,airfoils_ref)
-    rewrite_airfoils(airfoils_mut,airfoilFileNames,workdir=workdir)
-    return airfoils_mut
+# def patch_airfoils(chromosome,airfoils_ref):
+#     new_airfoils=copy.deepcopy(airfoils_ref)
+#     genes = np.array_split(chromosome,len(airfoils_ref))
+#     for [af,gn] in zip(new_airfoils,genes):
+#         af = patch_airfoil(gn,af)
+#     return new_airfoils
+# 
+# def rewrite_airfoils(airfoils,airfoilFileNames,workdir=''):
+#     # Reading the files, chainging the polars and rewriting
+#     for af,f in zip(airfoils,airfoilFileNames):
+#         #print('Rewriting {}'.format(os.path.join(workdir,f)))
+#         AF = weio.FASTInFile(os.path.join(workdir,f))
+#         AF['AFCoeff'] = af['polar']
+#         AF.write()
+# 
+# def patch_airfoil_files(chromosome,airfoils_ref,airfoilFileNames,workdir=''):
+#     ### --- Create hacked airfoil data
+#     airfoils_mut=patch_airfoils(chromosome,airfoils_ref)
+#     rewrite_airfoils(airfoils_mut,airfoilFileNames,workdir=workdir)
+#     return airfoils_mut
 
 def run_sim(sim_dir,FAST,nSIM,exe=None):
     if FAST==1:
@@ -235,7 +235,7 @@ def postpro_simdir(sim_dir,TimeAvgWindow,FAST):
         iEndTime=df.index[-1]
         endTime=df['Time'][iEndTime]
         if TimeAvgWindow is None:
-            Omega=df['RotSpeed'].mean()
+            Omega=df['RotSpeed'].mean()/60*2*np.pi
             TimeAvgWindow=(2*np.pi/Omega)*2 # averaging about two rotations
             if TimeAvgWindow>endTime:
                 print('>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>Time too short!')

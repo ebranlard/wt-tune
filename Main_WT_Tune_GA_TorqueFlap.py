@@ -10,6 +10,7 @@ import re
 import math
 import pdb
 import distutils.dir_util
+import platform
 
 from scipy.interpolate import RegularGridInterpolator
 from scipy.optimize import minimize
@@ -87,7 +88,7 @@ def genotype_to_FASTphenotype(chromosome):
 
 
 ### --- PARAMETERS
-def individualFitness(chromosome,outdir=None,ForceEvaluation=False):
+def individualFitness(chromosome,outdir=None,ForceEvaluation=False,stat=''):
     """ 
     Evaluate an individual.
     Global variable used so far: CH_MAP, WS_SIM, GA_DIR, TIMEAVGWINDOW, EXE, ref_dir
@@ -103,7 +104,7 @@ def individualFitness(chromosome,outdir=None,ForceEvaluation=False):
     chromosome.data['ID']   = ID
     chromosome.data['dir']  = sim_dir 
     #print('--- EVALUATING {} '.format(chromosome.data['ID']),end='')
-    print('--- EVALUATING {} '.format(CH_MAP.show_full(chromosome,'\t')),end='')
+    print('--- {}{} '.format(stat,CH_MAP.show_full(chromosome,' ')),end='')
     # Checking if all files are present and with non zero size in the sim folder
     outfiles = glob.glob(os.path.join(sim_dir,'*.out'))
     bFilesOK=False
@@ -120,12 +121,37 @@ def individualFitness(chromosome,outdir=None,ForceEvaluation=False):
         run_sim(sim_dir,FAST,len(WS_SIM),exe=EXE)
         print(' --- ', end='')
 
-    # Evaluating performances and fitnesses
+    ## Evaluating performances and fitnesses
     chromosome.data['perf'] = postpro_simdir(sim_dir, TimeAvgWindow = TIMEAVGWINDOW, FAST = FAST)
     perf_err,_ = get_perf_error(chromosome.data['perf'], PerformanceSignals, perf_ref=RefValues)
     fits = [v for v in perf_err.values]
     print(' Fit: ['+','.join(['{:5.2f}'.format(f) for f in fits])+' ]')
     return fits
+
+def evalNeutralChromosome(outdir=None,ForceEvaluation=False):
+    print('Neutral chromosome...')
+    neutral=galib.Indiv()
+    neutral[:]=CH_MAP.neutralChromosome()
+    neutral.fitness.values=individualFitness(neutral,outdir=outdir,ForceEvaluation=ForceEvaluation)
+    NeutralValues=neutral.data['perf']
+    NeutralValues.columns=[c+'_ori' for c in NeutralValues.columns.values]
+    return neutral,NeutralValues
+
+def exportBestData(best,best_dir_dest, RefValues=None, NeutralValues=None):
+    with open(os.path.join(best_dir_dest,'chromosome.csv'),'w') as f:
+        v=[best.data['ID']]+[v for v in best.fitness.values]+best
+        sv = ', '.join([str(val) for val in v])
+        f.write(sv+'\n')
+        f.write(CH_MAP.show_full(best))
+    Vals=[]
+    if RefValues is not None:
+        Vals+=[RefValues]
+    Vals+=[best.data['perf']]
+    if NeutralValues is not None:
+        Vals+=[NeutralValues]
+    #df = pd.concat([RefValuesNewCol,best.data['perf']],axis=1)
+    df = pd.concat(Vals,axis=1)
+    df.to_csv(os.path.join(best_dir_dest,'Results.csv'),index=False)
 
 def individualPlot(chromosome,fig=None):
     if not fig:
@@ -290,31 +316,6 @@ def getRandomPop(n=3):
     toolbox.register("population", tools.initRepeat, list, toolbox.individual)
     return toolbox.population(n=n)
 
-def evalNeutralChromosome(outdir=None,ForceEvaluation=False):
-    print('Neutral chromosome...')
-    neutral=galib.Indiv()
-    neutral[:]=CH_MAP.neutralChromosome()
-    neutral.fitness.values=individualFitness(neutral,outdir=outdir,ForceEvaluation=ForceEvaluation)
-    NeutralValues=neutral.data['perf']
-    NeutralValues.columns=[c+'_ori' for c in NeutralValues.columns.values]
-    return neutral,NeutralValues
-
-def exportBestData(best,best_dir_dest, RefValues=None, NeutralValues=None):
-    with open(os.path.join(best_dir_dest,'chromosome.csv'),'w') as f:
-        v=[best.data['ID']]+[v for v in best.fitness.values]+best
-        sv = ', '.join([str(val) for val in v])
-        f.write(sv)
-        f.write(CH_MAP.show_full(best))
-    Vals=[]
-    if RefValues is not None:
-        Vals+=[RefValues]
-    Vals+=[best.data['perf']]
-    if NeutralValues is not None:
-        Vals+=[NeutralValues]
-    #df = pd.concat([RefValuesNewCol,best.data['perf']],axis=1)
-    df = pd.concat(Vals,axis=1)
-    df.to_csv(os.path.join(best_dir_dest,'Results.csv'),index=False)
-
 
 def mainGA(nBase=2,nInd=10,nIndSelect=10,CXPB=0.3,MUTPB=0.3,nIterMax=100,nPerTournament=2,MutStep=0.1,MutMethod='PolyBound',CXFunction=tools.cxTwoPoint, MutParam1=0.05):
     # Global variables for plotting 
@@ -354,7 +355,7 @@ def mainGA(nBase=2,nInd=10,nIndSelect=10,CXPB=0.3,MUTPB=0.3,nIterMax=100,nPerTou
     pop = toolbox.population(n=nInd)
     if bEnforceNeutral:
         pop.append(toolbox.clone(neutral_ori))
-    pop = galib.populationTrimAccuracy(pop,DECIMALS)
+    pop = galib.populationTrimAccuracy(pop,int(np.log10(RESOLUTION)))
 
     #StatsFits.append = np.zeros((nIterMax,nObjectives)
     
@@ -415,8 +416,7 @@ def mainGA(nBase=2,nInd=10,nIndSelect=10,CXPB=0.3,MUTPB=0.3,nIterMax=100,nPerTou
         # --- ENFORCING PREVIOUS BEST IN OFFSPRING
         for e in enforce:
             galib.addIfAbsent(offspring,e,'mutated offspring')
-
-        offspring = galib.populationTrimAccuracy(offspring,DECIMALS)
+        offspring = galib.populationTrimAccuracy(offspring,int(np.log10(RESOLUTION)))
         if len(figs)>0:
             populationPlot(offspring,fig=figs[0],kind='offspring')
             plt.pause(0.001)
@@ -479,58 +479,59 @@ def mainGA(nBase=2,nInd=10,nIndSelect=10,CXPB=0.3,MUTPB=0.3,nIterMax=100,nPerTou
 
 
 # --------------------------------------------------------------------------------}
-# ---  
+# --- PARAMETER DEFINITIONS 
 # --------------------------------------------------------------------------------{
 ### --- PARAMETERS
+RESOLUTION = 1000; # resolution for variable range between min and max
 FAST=1
 if FAST==1:
     GA_DIR  = '_GA_Runs'
     DB_DIR  = '_GA_Runs_DB'
-    ref_dir = 'OpenFAST_V27_v2_ForGA/'
+    ref_dir = 'OpenFAST_V27_v2_forGA/'
     WS_SIM  = np.array([4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10])
-    TIMEAVGWINDOW=None
+
 else:
     GA_DIR  = '_GA_Runs_AD'
     DB_DIR  = '_GA_Runs_AD_DB'
     ref_dir = 'AeroDyn_V27_v1_refMulti/'
     #WS_SIM  = np.array([ 5, 7, 9, 11, 13, 15, 17, 19, 21, 23, 25]);
     WS_SIM  = np.array([ 5, 7, 9, 11, 13, 15, 17, 19]);
-    TIMEAVGWINDOW=0.5
-
-### --- PARAMETERS
-airfoilFileNames = ['AD_5_63-214_mod.dat','AD_4_63-218_mod.dat','AD_3_63-224_mod.dat','AD_2_63-235_mod.dat']
-airfoilFileNames = [os.path.join('AeroData_AD15',a) for a in airfoilFileNames]
-
-PerformanceSignals = ['RPM','FlapM','Pgen']
-
-DECIMALS=3  #<<< IMPORTANT FOR RESOLUTION
-
-CH_MAP=galib.ChromosomeMap()
-# TUNING AIRFOILS ONLY:
-airfoils_ref=[]
-for af in airfoilFileNames:
-    af_ref=read_airfoils([af],workdir=ref_dir)[0]
-#     gene_info=galib.GeneMap(nBases=3, kind='airfoil',name=af, meta=af_ref, protein_ranges=[[0,1],[0,1],[0,1]], protein_neutr=[0.5,0.5,0])
-#     airfoils_ref.append(af_ref)
-#     CH_MAP.append(gene_info)
-
-CH_MAP.add(galib.GeneMap(nBases=1, kind='fast_param', name='ServoFile|GenEff'  ,protein_ranges=[[90,100]]       , protein_neutr=[94] ))
-CH_MAP.add(galib.GeneMap(nBases=1, kind='fast_param', name='EDFile|GBoxEff'    ,protein_ranges=[[90,100]]       , protein_neutr=[94] ))
-CH_MAP.add(galib.GeneMap(nBases=1, kind='fast_param', name='ServoFile|VS_Rgn2K',protein_ranges=[[0.0003,0.0005]], protein_neutr=[0.00038245] ))
-CH_MAP.add(galib.GeneMap(nBases=1, kind='builtin', name='pitch',protein_ranges=[[-2,3]], protein_neutr=[0.0] ))
-
-
-
-
-
-
+TIMEAVGWINDOW=None
+if platform.system()=='Linux':
+    EXE     = '_Exe/gcc'
+else:
+	EXE     = '_Exe/OpenFAST2_x64s_ebra.exe'  ;
+RefFile = '_data/swiftData_Half_Binned.csv'
+# --- GA Specific options
 bEnforceBests=True
 bEnforceNeutral=False
 
-EXE     = '_Exe/OpenFAST2_x64s_ebra.exe'  ;
-RefFile = '_data/swiftData_Half_Binned.csv'
+# --- CHOICE OF TUNING PARAMETERS
+PerformanceSignals = ['RPM','FlapM','Pgen']
 
+CH_MAP=galib.ChromosomeMap()
+# Airfoils
+# airfoilFileNames = ['AD_5_63-214_mod.dat','AD_4_63-218_mod.dat','AD_3_63-224_mod.dat','AD_2_63-235_mod.dat']
+# airfoilFileNames = [os.path.join('AeroData_AD15',a) for a in airfoilFileNames]
+airfoilFileNames = ['AD_3_63-224_mod.dat','AD_2_63-235_mod.dat']
+airfoilFileNames = [os.path.join('AeroData_AD15',a) for a in airfoilFileNames]
+airfoils_ref=[]
+for af in airfoilFileNames:
+    af_ref=read_airfoils([af],workdir=ref_dir)[0]
+    gene_info=galib.GeneMap(nBases=3, kind='airfoil',name=af, meta=af_ref, protein_ranges=[[0,1],[0,1],[0,1]], protein_neutr=[0.5,0.5,0])
+    airfoils_ref.append(af_ref)
+    CH_MAP.append(gene_info)
+# Fast params
+CH_MAP.add(galib.GeneMap(nBases=1, kind='fast_param', name='ServoFile|GenEff'  ,protein_ranges=[[90,100]]       , protein_neutr=[94], resolution=RESOLUTION ))
+CH_MAP.add(galib.GeneMap(nBases=1, kind='fast_param', name='EDFile|GBoxEff'    ,protein_ranges=[[90,100]]       , protein_neutr=[94], resolution=RESOLUTION ))
+CH_MAP.add(galib.GeneMap(nBases=1, kind='fast_param', name='ServoFile|VS_Rgn2K',protein_ranges=[[0.0003,0.0005]], protein_neutr=[0.00038245], resolution=RESOLUTION ))
+CH_MAP.add(galib.GeneMap(nBases=1, kind='builtin', name='pitch',protein_ranges=[[-2,3]], protein_neutr=[0.0] , resolution=RESOLUTION))
 
+print('Number of Bases    :',CH_MAP.nBases)
+print('Number of Genes    :',CH_MAP.nGenes)
+print('Neutral chromosome :',CH_MAP.neutralChromosome())
+print('Neutral protein    :',CH_MAP.neutralProtein())
+print(CH_MAP)
 
 # --------------------------------------------------------------------------------}
 # --- Derived params 
@@ -539,46 +540,37 @@ RefFile = '_data/swiftData_Half_Binned.csv'
 IPlot              = PerformanceSignals
 objectiveWeights=(-1.0,)*len(PerformanceSignals) # negative = minimalization 
 nObjectives=len(objectiveWeights)
-
-# template_dir = os.path.normpath(os.path.join(ref_dir,'..',GA_DIR,'_Template'))
-print('Number of Bases    :',CH_MAP.nBases)
-print('Number of Genes    :',CH_MAP.nGenes)
-print('Neutral chromosome :',CH_MAP.neutralChromosome())
-print('Neutral protein    :',CH_MAP.neutralProtein())
-print(CH_MAP)
-
-
-# -- Reference operating conditions and values (table as function of WS)
+# -- Reference operating conditions and performance values (table as function of WS)
 RefValues=pd.read_csv(RefFile)
 RefValues['Pitch']=RefValues['Pitch']*0+1
-# Ref_Values=pandalib.pd_interp1('WS',perf_all,WS_SIM)
 RefValues=pandalib.pd_interp1('WS',RefValues,WS_SIM)
 PerfScale = RefValues[['WS']+IPlot].max()
 PerfScale['WS'] = PerfScale['WS']*0+1
 RefValuesNewCol=RefValues.copy()
 RefValuesNewCol.columns=[c+'_ref' for c in RefValues.columns.values]
-
-
-
-
-
 print('Simulations:')
 print(RefValues)
+
+
+
+
+# --------------------------------------------------------------------------------}
+# --- Full GA
+# --------------------------------------------------------------------------------{
 ### --- INIT
-# plt.ion()
+plt.ion()
 figs=[]
-# figs+=figlib.fig_grid(AreaName='Left',ScreenName='RightScreen')
-# # figs+=figlib.fig_grid(2,1,AreaName='Right',ScreenName='RightScreen')
-# figs+=figlib.fig_grid(AreaName='TopRight',ScreenName='RightScreen')
-# plt.show()
-##
+figs+=figlib.fig_grid(AreaName='Left',ScreenName='RightScreen')
+figs+=figlib.fig_grid(2,1,AreaName='Right',ScreenName='RightScreen')
+figs+=figlib.fig_grid(AreaName='TopRight',ScreenName='RightScreen')
+plt.show()
 # 
 
 # --- Full GA
 creator.create("Fitness", base.Fitness, weights=objectiveWeights)
 creator.create("Individual", list, fitness=creator.Fitness)
 pop,best_ind=mainGA(nBase=CH_MAP.nBases
-          ,nInd=32,nIndSelect=16,CXPB=0.5,MUTPB=0.5
+          ,nInd=8,nIndSelect=4,CXPB=0.5,MUTPB=0.5
 #           ,nInd=32,nIndSelect=16,CXPB=0.5,MUTPB=0.5
 #          ,MutMethod='PolyBound',MutParam1=0.001,nPerTournament=2
 #            ,MutMethod='UniBound',MutParam1=np.nan,nPerTournament=2
@@ -591,5 +583,3 @@ pop,best_ind=mainGA(nBase=CH_MAP.nBases
 ##pop,pop_init,best_ind=main(nBase=,nInd=10,CXPB=0.5,MUTPB=0.9,nIterMax=100,nPerTournament=2);
 ##pop,pop_init,best_ind=main(nBase=,nInd=30,CXPB=0.5,MUTPB=0.5,nIterMax=100,nPerTournament=2);
 #individualPlot(neutral,fig1=figs[0],fig2=figs[1])
-# 
-# # 

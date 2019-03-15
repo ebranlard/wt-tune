@@ -34,7 +34,6 @@ class GeneMap():
         A gene is between 0 and 1 
         A protein is defined by the ranges
         """
-        self.name   = name
         self.nBases = nBases
         self.kind   = kind
         self.protein_ranges = protein_ranges
@@ -43,6 +42,19 @@ class GeneMap():
             self.protein_neutr=[(m+M)/2 for m,M in protein_ranges]
         self.meta  = meta
         self.resolution  = resolution
+
+        def pretty_name(n):
+            if n.find('|')>0:
+                s=n.split('|')
+                return s[-1]
+            elif n.find('\\')>0:
+                n=n.replace('.dat','')
+                s=n.split('\\')
+                return s[-1]
+            else:
+                return n
+        self.name          = name
+        self.pretty_name   = pretty_name(name)
 
     def __repr__(self):
         s=''.join(['x']*self.nBases)+': '+self.name+'\n'
@@ -84,13 +96,6 @@ class GeneMap():
         return s
 
     def show_full(self,gene):
-        def pretty_name(n):
-            if n.find('|')>0:
-                s=n.split('|')
-                return s[-1]
-            else:
-                return n
-
         def pretty(b,pr):
             delta=pr[1]-pr[0]
             if delta>0:
@@ -112,9 +117,9 @@ class GeneMap():
                 return str(b)
         
         if self.nBases>1:
-            s=pretty_name(self.name)+': ['+' '.join([pretty(b,rg) for b,rg in zip(self.decode(gene),self.protein_ranges)])+']'
+            s=self.pretty_name+': ['+' '.join([pretty(b,rg) for b,rg in zip(self.decode(gene),self.protein_ranges)])+']'
         else:
-            s=pretty_name(self.name)+': '+pretty(self.decode(gene)[0],self.protein_ranges[0])
+            s=self.pretty_name+': '+pretty(self.decode(gene)[0],self.protein_ranges[0])
         return s
 
     def geneBounds(self):
@@ -299,7 +304,7 @@ def clone(x):
     return deepcopy(x)
 
 
-def populationTrimAccuracy(pop,nDecimals):
+def populationTrimAccuracy(pop,nDecimals=None):
     for i in range(len(pop)):
         for j in range(len(pop[0])):
             pop[i][j]=np.around(pop[i][j],decimals=nDecimals)

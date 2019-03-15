@@ -126,9 +126,7 @@ def individualFitness(chromosome,outdir=None,ForceEvaluation=False,stat=''):
     perf_err,_ = get_perf_error(chromosome.data['perf'], PerformanceSignals, perf_ref=RefValues)
     fits = [v for v in perf_err.values]
     print(' Fit: ['+','.join(['{:5.2f}'.format(f) for f in fits])+' ]')
-    fits=[0,0,0]
     return fits
-
 
 def evalNeutralChromosome(outdir=None,ForceEvaluation=False):
     print('Neutral chromosome...')
@@ -155,12 +153,14 @@ def exportBestData(best,best_dir_dest, RefValues=None, NeutralValues=None):
     df = pd.concat(Vals,axis=1)
     df.to_csv(os.path.join(best_dir_dest,'Results.csv'),index=False)
 
+
 # --------------------------------------------------------------------------------}
 # --- PARAMETER DEFINITIONS 
 # --------------------------------------------------------------------------------{
 ### --- PARAMETERS
 RESOLUTION = 1000; # resolution for variable range between min and max
 FAST=1
+GA_DIR  = '_GA_Parametric'
 ref_dir = 'OpenFAST_V27_v2_forGA/'
 WS_SIM  = np.array([4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10])
 TIMEAVGWINDOW=None
@@ -192,11 +192,6 @@ print('Number of Genes    :',CH_MAP.nGenes)
 print('Neutral chromosome :',CH_MAP.neutralChromosome())
 print('Neutral protein    :',CH_MAP.neutralProtein())
 print(CH_MAP)
-
-
-# --- Options for parametric run
-# nValuesPerBase = 4 # <<<
-GA_DIR  = '_GA_Parametric'
 
 # --------------------------------------------------------------------------------}
 # --- Derived params 
