@@ -212,10 +212,21 @@ print(RefValues)
 # --------------------------------------------------------------------------------{
 # --- Parametric GA
 fits_norm,fits_arr,pop,v,vProt=galib.parameticGA(individualFitness,CH_MAP,[5,5,5,5],len(PerformanceSignals), resolution=RESOLUTION)
-bnds     = tuple([(m+1.e-6,M-1e-6) for m,M in CH_MAP.chromosomeBounds()])
+bnds       = tuple([(m+1.e-6,M-1e-6) for m,M in CH_MAP.chromosomeBounds()])
+bndsProt   = tuple([(m+1.e-6,M-1e-6) for m,M in CH_MAP.proteinChainBounds()])
 print('Neutral chromosome:',CH_MAP.neutralChromosome())
 print('v',v)
 print('v',bnds)
+np.save(os.path.join(GA_DIR,'fits_norm.npy'  ),fits_norm                )
+np.save(os.path.join(GA_DIR,'fits_arr.npy'   ),fits_arr                 )
+np.save(os.path.join(GA_DIR,'vBase.npy'      ),v                        )
+np.save(os.path.join(GA_DIR,'vProt.npy'      ),vProt                    )
+np.save(os.path.join(GA_DIR,'neutProt.npy'   ),CH_MAP.neutralProtein    ())
+np.save(os.path.join(GA_DIR,'neutChrom.npy'  ),CH_MAP.neutralChromosome ())
+np.save(os.path.join(GA_DIR,'boundsChrom.npy'),CH_MAP.chromosomeBounds  ())
+np.save(os.path.join(GA_DIR,'boundsProt.npy' ),CH_MAP.proteinChainBounds())
+np.save(os.path.join(GA_DIR,'geneNames.npy' ), [gm.name for gm in CH_MAP])
+np.save(os.path.join(GA_DIR,'nBases.npy' ), [gm.nBases for gm in CH_MAP])
 
 # --- Find minimum
 fInterp = RegularGridInterpolator(tuple(v), fits_norm)

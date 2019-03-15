@@ -238,7 +238,7 @@ def postpro_simdir(sim_dir,TimeAvgWindow,FAST):
             Omega=df['RotSpeed'].mean()/60*2*np.pi
             TimeAvgWindow=(2*np.pi/Omega)*2 # averaging about two rotations
             if TimeAvgWindow>endTime:
-                print('>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>Time too short!')
+                print('>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>Time too short!',TimeAvgWindow,endTime,sim_dir)
             TimeAvgWindow=min(TimeAvgWindow,endTime)
         iStartTime=(df['Time']-(endTime-TimeAvgWindow)).abs().idxmin()
         startTime=df['Time'][df.index[iStartTime]]

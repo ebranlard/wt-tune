@@ -46,12 +46,7 @@ def genotype_to_FASTphenotype(chromosome):
     PARAMS=[]
     for wsp,rpm,pit in zip(RefValues['WS'],RefValues['RPM'],RefValues['Pitch']):
         p=dict()
-        if wsp<6:
-            p['FAST|TMax']         = 18
-        elif wsp<9:
-            p['FAST|TMax']         = 16
-        else:
-            p['FAST|TMax']         = 14
+        p['FAST|TMax']             = 30
         p['FAST|DT']               = 0.01
         p['FAST|DT_Out']           = 0.1
         p['FAST|OutFileFmt']       = 1 # TODO
@@ -525,7 +520,7 @@ for af in airfoilFileNames:
 CH_MAP.add(galib.GeneMap(nBases=1, kind='fast_param', name='ServoFile|GenEff'  ,protein_ranges=[[90,100]]       , protein_neutr=[94], resolution=RESOLUTION ))
 CH_MAP.add(galib.GeneMap(nBases=1, kind='fast_param', name='EDFile|GBoxEff'    ,protein_ranges=[[90,100]]       , protein_neutr=[94], resolution=RESOLUTION ))
 CH_MAP.add(galib.GeneMap(nBases=1, kind='fast_param', name='ServoFile|VS_Rgn2K',protein_ranges=[[0.0003,0.0005]], protein_neutr=[0.00038245], resolution=RESOLUTION ))
-CH_MAP.add(galib.GeneMap(nBases=1, kind='builtin', name='pitch',protein_ranges=[[-2,3]], protein_neutr=[0.0] , resolution=RESOLUTION))
+CH_MAP.add(galib.GeneMap(nBases=1, kind='builtin'   , name='pitch'             ,protein_ranges=[[-1,2]], protein_neutr=[0.0] , resolution=RESOLUTION))
 
 print('Number of Bases    :',CH_MAP.nBases)
 print('Number of Genes    :',CH_MAP.nGenes)
@@ -558,20 +553,19 @@ print(RefValues)
 # --- Full GA
 # --------------------------------------------------------------------------------{
 ### --- INIT
-plt.ion()
-figs=[]
-figs+=figlib.fig_grid(AreaName='Left',ScreenName='RightScreen')
-figs+=figlib.fig_grid(2,1,AreaName='Right',ScreenName='RightScreen')
-figs+=figlib.fig_grid(AreaName='TopRight',ScreenName='RightScreen')
-plt.show()
+# figs=[]
+# figs+=figlib.fig_grid(AreaName='Left',ScreenName='RightScreen')
+# figs+=figlib.fig_grid(2,1,AreaName='Right',ScreenName='RightScreen')
+# figs+=figlib.fig_grid(AreaName='TopRight',ScreenName='RightScreen')
+# plt.ion()
+# plt.show()
 # 
 
 # --- Full GA
 creator.create("Fitness", base.Fitness, weights=objectiveWeights)
 creator.create("Individual", list, fitness=creator.Fitness)
 pop,best_ind=mainGA(nBase=CH_MAP.nBases
-          ,nInd=8,nIndSelect=4,CXPB=0.5,MUTPB=0.5
-#           ,nInd=32,nIndSelect=16,CXPB=0.5,MUTPB=0.5
+          ,nInd=32,nIndSelect=16,CXPB=0.5,MUTPB=0.5
 #          ,MutMethod='PolyBound',MutParam1=0.001,nPerTournament=2
 #            ,MutMethod='UniBound',MutParam1=np.nan,nPerTournament=2
           ,MutMethod='GaussianBound',MutParam1=0.01,nPerTournament=2

@@ -97,22 +97,23 @@ class GeneMap():
 
     def show_full(self,gene):
         def pretty(b,pr):
+            if self.resolution is None:
+                return str(b)
             delta=pr[1]-pr[0]
-            if delta>0:
-                nDec=int(np.log10(delta/self.resolution))
-                nInt=int(np.log10(pr[1]))
-                if nInt<0:
-                    nInt=-1
-                if nDec<0:
-                    fmt='{:'+str(nInt-nDec+3)+'.'+str(-nDec+1)+'f}'
-                    #print(fmt)
-                    return fmt.format(b)
-                elif nInt>0:
-                    fmt='{:'+str(nInt+1)+'.0f}'
-                    #print(fmt)
-                    return fmt.format(b)
-                else:
-                    return str(b)
+            if delta<=0:
+                return str(b)
+            nDec=int(np.log10(delta/self.resolution))
+            nInt=int(np.log10(pr[1]))
+            if nInt<0:
+                nInt=-1
+            if nDec<0:
+                fmt='{:'+str(nInt-nDec+3)+'.'+str(-nDec+1)+'f}'
+                #print(fmt)
+                return fmt.format(b)
+            elif nInt>0:
+                fmt='{:'+str(nInt+1)+'.0f}'
+                #print(fmt)
+                return fmt.format(b)
             else:
                 return str(b)
         
