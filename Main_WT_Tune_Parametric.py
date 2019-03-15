@@ -10,6 +10,7 @@ import re
 import math
 import pdb
 import distutils.dir_util
+import platform
 
 from scipy.interpolate import RegularGridInterpolator
 from scipy.optimize import minimize
@@ -154,85 +155,65 @@ def exportBestData(best,best_dir_dest, RefValues=None, NeutralValues=None):
     df.to_csv(os.path.join(best_dir_dest,'Results.csv'),index=False)
 
 # --------------------------------------------------------------------------------}
-# ---  
+# --- PARAMETER DEFINITIONS 
 # --------------------------------------------------------------------------------{
 ### --- PARAMETERS
 FAST=1
-if FAST==1:
-    GA_DIR  = '_GA_Runs'
-    DB_DIR  = '_GA_Runs_DB'
-    ref_dir = 'OpenFAST_V27_v2_ForGA/'
-    WS_SIM  = np.array([4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10])
-    TIMEAVGWINDOW=None
+ref_dir = 'OpenFAST_V27_v2_forGA/'
+WS_SIM  = np.array([4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10])
+TIMEAVGWINDOW=None
+if platform.system()=='Linux':
+    EXE     = '_Exe/openfast'
 else:
-    GA_DIR  = '_GA_Runs_AD'
-    DB_DIR  = '_GA_Runs_AD_DB'
-    ref_dir = 'AeroDyn_V27_v1_refMulti/'
-    #WS_SIM  = np.array([ 5, 7, 9, 11, 13, 15, 17, 19, 21, 23, 25]);
-    WS_SIM  = np.array([ 5, 7, 9, 11, 13, 15, 17, 19]);
-    TIMEAVGWINDOW=0.5
+    EXE     = '_Exe/OpenFAST2_x64s_ebra.exe'  ;
+RefFile = '_data/swiftData_Half_Binned.csv'
 
-### --- PARAMETERS
-airfoilFileNames = ['AD_5_63-214_mod.dat','AD_4_63-218_mod.dat','AD_3_63-224_mod.dat','AD_2_63-235_mod.dat']
-airfoilFileNames = [os.path.join('AeroData_AD15',a) for a in airfoilFileNames]
-
+# --- CHOICE OF TUNING PARAMETERS
 PerformanceSignals = ['RPM','FlapM','Pgen']
 
-DECIMALS=3  #<<< IMPORTANT FOR RESOLUTION
-
 CH_MAP=galib.ChromosomeMap()
-# TUNING AIRFOILS ONLY:
-airfoils_ref=[]
-for af in airfoilFileNames:
-    af_ref=read_airfoils([af],workdir=ref_dir)[0]
+# Airfoils
+# airfoilFileNames = ['AD_5_63-214_mod.dat','AD_4_63-218_mod.dat','AD_3_63-224_mod.dat','AD_2_63-235_mod.dat']
+# airfoilFileNames = [os.path.join('AeroData_AD15',a) for a in airfoilFileNames]
+# for af in airfoilFileNames:
+#     af_ref=read_airfoils([af],workdir=ref_dir)[0]
 #     gene_info=galib.GeneMap(nBases=3, kind='airfoil',name=af, meta=af_ref, protein_ranges=[[0,1],[0,1],[0,1]], protein_neutr=[0.5,0.5,0])
-#     airfoils_ref.append(af_ref)
 #     CH_MAP.append(gene_info)
-
+# Fast params
 CH_MAP.add(galib.GeneMap(nBases=1, kind='fast_param', name='ServoFile|GenEff'  ,protein_ranges=[[90,100]]       , protein_neutr=[94] ))
 CH_MAP.add(galib.GeneMap(nBases=1, kind='fast_param', name='EDFile|GBoxEff'    ,protein_ranges=[[90,100]]       , protein_neutr=[94] ))
 CH_MAP.add(galib.GeneMap(nBases=1, kind='fast_param', name='ServoFile|VS_Rgn2K',protein_ranges=[[0.0003,0.0005]], protein_neutr=[0.00038245] ))
 CH_MAP.add(galib.GeneMap(nBases=1, kind='builtin', name='pitch',protein_ranges=[[-2,3]], protein_neutr=[0.0] ))
 
-EXE     = '_Exe/OpenFAST2_x64s_ebra.exe'  ;
-RefFile = '_data/swiftData_Half_Binned.csv'
-
-
-
-# --------------------------------------------------------------------------------}
-# --- Derived params 
-# --------------------------------------------------------------------------------{
-# --- Derived Params
-IPlot              = PerformanceSignals
-objectiveWeights=(-1.0,)*len(PerformanceSignals) # negative = minimalization 
-nObjectives=len(objectiveWeights)
-
-# template_dir = os.path.normpath(os.path.join(ref_dir,'..',GA_DIR,'_Template'))
 print('Number of Bases    :',CH_MAP.nBases)
 print('Number of Genes    :',CH_MAP.nGenes)
 print('Neutral chromosome :',CH_MAP.neutralChromosome())
 print('Neutral protein    :',CH_MAP.neutralProtein())
 print(CH_MAP)
 
+# --- Options for parametric run
+nValuesPerBase = 4 # <<<
+GA_DIR  = '_GA_Parametric'
 
-# -- Reference operating conditions and values (table as function of WS)
+# --------------------------------------------------------------------------------}
+# --- Derived params 
+# --------------------------------------------------------------------------------{
+# -- Reference operating conditions and performance values (table as function of WS)
 RefValues=pd.read_csv(RefFile)
 RefValues['Pitch']=RefValues['Pitch']*0+1
-# Ref_Values=pandalib.pd_interp1('WS',perf_all,WS_SIM)
 RefValues=pandalib.pd_interp1('WS',RefValues,WS_SIM)
-PerfScale = RefValues[['WS']+IPlot].max()
-PerfScale['WS'] = PerfScale['WS']*0+1
 RefValuesNewCol=RefValues.copy()
 RefValuesNewCol.columns=[c+'_ref' for c in RefValues.columns.values]
-
-
 print('Simulations:')
 print(RefValues)
-# 
+
+
+
+# --------------------------------------------------------------------------------}
+# --- Parametric run and minimization
+# --------------------------------------------------------------------------------{
 # --- Parametric GA
-GA_DIR  = '_GA_Parametric'
-# fits,pop,v=parameticGA(CH_MAP,[8,9,7,5])
-fits_norm,fits_arr,pop,v,vProt=galib.parameticGA(individualFitness,CH_MAP,4,len(PerformanceSignals))
+fits_norm,fits_arr,pop,v,vProt=galib.parameticGA(individualFitness,CH_MAP,nValuesPerBase,len(PerformanceSignals))
 bnds     = tuple([(m+1.e-6,M-1e-6) for m,M in CH_MAP.chromosomeBounds()])
 print('Neutral chromosome:',CH_MAP.neutralChromosome())
 print('v',v)
