@@ -47,11 +47,11 @@ def genotype_to_FASTphenotype(chromosome):
     for wsp,rpm,pit in zip(RefValues['WS'],RefValues['RPM'],RefValues['Pitch']):
         p=dict()
         if wsp<6:
-            p['FAST|TMax']         = 18
+            p['FAST|TMax']         = 28
         elif wsp<9:
-            p['FAST|TMax']         = 16
+            p['FAST|TMax']         = 23
         else:
-            p['FAST|TMax']         = 14
+            p['FAST|TMax']         = 20
         p['FAST|DT']               = 0.01
         p['FAST|DT_Out']           = 0.1
         p['FAST|OutFileFmt']       = 1 # TODO
@@ -216,7 +216,7 @@ print(RefValues)
 # --- Parametric run and minimization
 # --------------------------------------------------------------------------------{
 # --- Parametric GA
-fits_norm,fits_arr,pop,v,vProt=galib.parameticGA(individualFitness,CH_MAP,[4,4,4,4],len(PerformanceSignals), resolution=RESOLUTION)
+fits_norm,fits_arr,pop,v,vProt=galib.parameticGA(individualFitness,CH_MAP,[5,5,5,5],len(PerformanceSignals), resolution=RESOLUTION)
 bnds     = tuple([(m+1.e-6,M-1e-6) for m,M in CH_MAP.chromosomeBounds()])
 print('Neutral chromosome:',CH_MAP.neutralChromosome())
 print('v',v)
