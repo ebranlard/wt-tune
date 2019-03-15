@@ -141,12 +141,28 @@ def exportBestData(best,best_dir_dest, RefValues=None, NeutralValues=None):
     Vals=[]
     if RefValues is not None:
         Vals+=[RefValues]
+        dfRef=RefValues.copy()
+        dfRef.columns=[c.replace('_ref','') for c in dfRef.columns]
+        dfRef.columns=[c.replace('Loss','') for c in dfRef.columns]
+        dfRef=dfRef[['WS', 'RPM', 'Pitch' , 'Pgen', 'Qgen', 'FlapM']]
+        dfRef.to_csv(os.path.join(best_dir_dest,'ResultsMeasurements.csv'),index=False)
+
+
     Vals+=[best.data['perf']]
+
     if NeutralValues is not None:
         Vals+=[NeutralValues]
-    #df = pd.concat([RefValuesNewCol,best.data['perf']],axis=1)
+        dfNeut=NeutralValues.copy()
+        dfNeut.columns=[c.replace('_ori','') for c in dfNeut.columns]
+        dfNeut=dfNeut[['WS', 'RPM', 'Pitch' , 'Pgen', 'Qgen', 'FlapM']]
+        dfNeut.to_csv(os.path.join(best_dir_dest,'ResultsPrevious.csv'),index=False)
+
+    dfVals=best.data['perf'].copy()
+    dfVals=dfVals[['WS', 'RPM', 'Pitch' , 'Pgen', 'Qgen', 'FlapM']]
+    dfVals.to_csv(os.path.join(best_dir_dest,'ResultsNew.csv'),index=False)
+    # --- All
     df = pd.concat(Vals,axis=1)
-    df.to_csv(os.path.join(best_dir_dest,'Results.csv'),index=False)
+    df.to_csv(os.path.join(best_dir_dest,'ResultsAll.csv'),index=False)
 
 def individualPlot(chromosome,fig=None):
     if not fig:
@@ -517,10 +533,10 @@ for af in airfoilFileNames:
     airfoils_ref.append(af_ref)
     CH_MAP.append(gene_info)
 # Fast params
-CH_MAP.add(galib.GeneMap(nBases=1, kind='fast_param', name='ServoFile|GenEff'  ,protein_ranges=[[90,100]]       , protein_neutr=[94], resolution=RESOLUTION ))
-CH_MAP.add(galib.GeneMap(nBases=1, kind='fast_param', name='EDFile|GBoxEff'    ,protein_ranges=[[90,100]]       , protein_neutr=[94], resolution=RESOLUTION ))
+CH_MAP.add(galib.GeneMap(nBases=1, kind='fast_param', name='ServoFile|GenEff'  ,protein_ranges=[[90,99]]       , protein_neutr=[94], resolution=RESOLUTION ))
+CH_MAP.add(galib.GeneMap(nBases=1, kind='fast_param', name='EDFile|GBoxEff'    ,protein_ranges=[[90,99]]       , protein_neutr=[94], resolution=RESOLUTION ))
 CH_MAP.add(galib.GeneMap(nBases=1, kind='fast_param', name='ServoFile|VS_Rgn2K',protein_ranges=[[0.0003,0.0005]], protein_neutr=[0.00038245], resolution=RESOLUTION ))
-CH_MAP.add(galib.GeneMap(nBases=1, kind='builtin'   , name='pitch'             ,protein_ranges=[[-1,2]], protein_neutr=[0.0] , resolution=RESOLUTION))
+CH_MAP.add(galib.GeneMap(nBases=1, kind='builtin'   , name='pitch'             ,protein_ranges=[[-0.5,2]], protein_neutr=[1.665913124] , resolution=RESOLUTION))
 
 print('Number of Bases    :',CH_MAP.nBases)
 print('Number of Genes    :',CH_MAP.nGenes)

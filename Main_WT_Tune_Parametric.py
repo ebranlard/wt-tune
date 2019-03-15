@@ -46,12 +46,7 @@ def genotype_to_FASTphenotype(chromosome):
     PARAMS=[]
     for wsp,rpm,pit in zip(RefValues['WS'],RefValues['RPM'],RefValues['Pitch']):
         p=dict()
-        if wsp<6:
-            p['FAST|TMax']         = 28
-        elif wsp<9:
-            p['FAST|TMax']         = 23
-        else:
-            p['FAST|TMax']         = 20
+        p['FAST|TMax']             = 30
         p['FAST|DT']               = 0.01
         p['FAST|DT_Out']           = 0.1
         p['FAST|OutFileFmt']       = 1 # TODO
@@ -146,12 +141,31 @@ def exportBestData(best,best_dir_dest, RefValues=None, NeutralValues=None):
     Vals=[]
     if RefValues is not None:
         Vals+=[RefValues]
+        dfRef=RefValues.copy()
+        dfRef.columns=[c.replace('_ref','') for c in dfRef.columns]
+        dfRef.columns=[c.replace('Loss','') for c in dfRef.columns]
+        dfRef=dfRef[['WS', 'RPM', 'Pitch' , 'Pgen', 'Qgen', 'FlapM']]
+        dfRef.to_csv(os.path.join(best_dir_dest,'ResultsMeasurements.csv'),index=False)
+
+
     Vals+=[best.data['perf']]
+
     if NeutralValues is not None:
         Vals+=[NeutralValues]
-    #df = pd.concat([RefValuesNewCol,best.data['perf']],axis=1)
+        dfNeut=NeutralValues.copy()
+        dfNeut.columns=[c.replace('_ori','') for c in dfNeut.columns]
+        dfNeut=dfNeut[['WS', 'RPM', 'Pitch' , 'Pgen', 'Qgen', 'FlapM']]
+        dfNeut.to_csv(os.path.join(best_dir_dest,'ResultsPrevious.csv'),index=False)
+
+    dfVals=best.data['perf'].copy()
+    dfVals=dfVals[['WS', 'RPM', 'Pitch' , 'Pgen', 'Qgen', 'FlapM']]
+    dfVals.to_csv(os.path.join(best_dir_dest,'ResultsNew.csv'),index=False)
+    # --- All
     df = pd.concat(Vals,axis=1)
-    df.to_csv(os.path.join(best_dir_dest,'Results.csv'),index=False)
+    df.to_csv(os.path.join(best_dir_dest,'ResultsAll.csv'),index=False)
+
+
+
 
 
 # --------------------------------------------------------------------------------}
@@ -182,10 +196,10 @@ CH_MAP=galib.ChromosomeMap()
 #     gene_info=galib.GeneMap(nBases=3, kind='airfoil',name=af, meta=af_ref, protein_ranges=[[0,1],[0,1],[0,1]], protein_neutr=[0.5,0.5,0])
 #     CH_MAP.append(gene_info)
 # Fast params
-CH_MAP.add(galib.GeneMap(nBases=1, kind='fast_param', name='ServoFile|GenEff'  ,protein_ranges=[[90,100]]       , protein_neutr=[94], resolution=RESOLUTION ))
-CH_MAP.add(galib.GeneMap(nBases=1, kind='fast_param', name='EDFile|GBoxEff'    ,protein_ranges=[[90,100]]       , protein_neutr=[94], resolution=RESOLUTION ))
+CH_MAP.add(galib.GeneMap(nBases=1, kind='fast_param', name='ServoFile|GenEff'  ,protein_ranges=[[90,99]]       , protein_neutr=[94], resolution=RESOLUTION ))
+CH_MAP.add(galib.GeneMap(nBases=1, kind='fast_param', name='EDFile|GBoxEff'    ,protein_ranges=[[90,99]]       , protein_neutr=[94], resolution=RESOLUTION ))
 CH_MAP.add(galib.GeneMap(nBases=1, kind='fast_param', name='ServoFile|VS_Rgn2K',protein_ranges=[[0.0003,0.0005]], protein_neutr=[0.00038245], resolution=RESOLUTION ))
-CH_MAP.add(galib.GeneMap(nBases=1, kind='builtin', name='pitch',protein_ranges=[[-2,3]], protein_neutr=[0.0] , resolution=RESOLUTION))
+CH_MAP.add(galib.GeneMap(nBases=1, kind='builtin'   , name='pitch'             ,protein_ranges=[[-0.5,2]], protein_neutr=[1.665913124] , resolution=RESOLUTION))
 
 print('Number of Bases    :',CH_MAP.nBases)
 print('Number of Genes    :',CH_MAP.nGenes)
@@ -214,9 +228,7 @@ print(RefValues)
 fits_norm,fits_arr,pop,v,vProt=galib.parameticGA(individualFitness,CH_MAP,[5,5,5,5],len(PerformanceSignals), resolution=RESOLUTION)
 bnds       = tuple([(m+1.e-6,M-1e-6) for m,M in CH_MAP.chromosomeBounds()])
 bndsProt   = tuple([(m+1.e-6,M-1e-6) for m,M in CH_MAP.proteinChainBounds()])
-print('Neutral chromosome:',CH_MAP.neutralChromosome())
-print('v',v)
-print('v',bnds)
+# --- Backup
 np.save(os.path.join(GA_DIR,'fits_norm.npy'  ),fits_norm                )
 np.save(os.path.join(GA_DIR,'fits_arr.npy'   ),fits_arr                 )
 np.save(os.path.join(GA_DIR,'vBase.npy'      ),v                        )
@@ -236,6 +248,7 @@ print('Minimum protein   :',CH_MAP.decode(res.x))
 print('Minimum protein   :',CH_MAP.show_full(res.x))
 
 # --- Evaluating Neutral
+print('Neutral chromosome:',CH_MAP.neutralChromosome())
 neutral_dir_dest='_GA_Parametric/_Neutral'
 neutral_ori,NeutralValues=evalNeutralChromosome(outdir=neutral_dir_dest,ForceEvaluation=True)
 
