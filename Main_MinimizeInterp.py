@@ -28,7 +28,7 @@ from AirfoilTuningTools import *
 import numpy as np
 from mpl_toolkits.mplot3d import Axes3D
 import matplotlib
-GA_DIR='_Eagle'
+GA_DIR='_Eagle5'
 fits_norm   = np.load(os.path.join(GA_DIR,'fits_norm.npy'))
 fits_arr    = np.load(os.path.join(GA_DIR,'fits_arr.npy') )
 vBase       = np.load(os.path.join(GA_DIR,'vBase.npy')    )
@@ -47,37 +47,42 @@ res     = minimize(fInterp    , tuple(NeutProt), bounds = bndsProt)
 # print('Minimum chromosome:',res.x,'Min:',fInterp(res.x))
 # print('Minimum protein   :',CH_MAP.decode(res.x))
 print('Minimum protein   :',res.x)
+print('Genes',geneNames)
+print('NeutProt',NeutProt)
 # 
 
 geneNames= [g.split('|')[-1] for g in geneNames]
 
 I=[0,1]
 
-colrs=['b','r','g','m']
+colrs=['b','r','g','m','y']
 
 def myplot3d(ix=0,iy=1,iz=2):
-    x=vProt[ix]
-    y=vProt[iy]
-    z=vProt[iz]
-    X, Y = np.meshgrid(x, y)
+    vx=vProt[ix]
+    vy=vProt[iy]
+    vz=vProt[iz]
+    X, Y = np.meshgrid(vx, vy)
 
     fig = plt.figure()
     ax = fig.add_subplot(111, projection='3d')
     if ix==0 and iy==1 and iz==2:
-        for k,z in enumerate(z) :
-            Z = fits_norm[:,:,k,0].transpose()
-            ax.plot_surface(X, Y, Z,color=colrs[k])
-            ax.plot(X[0],Y[0],Z[0], linestyle="none", c=colrs[k], marker = 'o',label='{}={}'.format(geneNames[iz],z))
+        for l,zz in enumerate(vProt[3]):
+            for k,z in enumerate(vz) :
+                Z = fits_norm[:,:,k,l].transpose()
+                ax.plot_surface(X, Y, Z,color=colrs[k])
+                ax.plot(X[0],Y[0],Z[0], linestyle="none", c=colrs[k], marker = 'o',label='{}={}'.format(geneNames[iz],z))
     elif ix==0 and iy==2 and iz==3:
-        for k,z in enumerate(z) :
-            Z = fits_norm[:,0,:,k].transpose()
-            ax.plot_surface(X, Y, Z,color=colrs[k])
-            ax.plot(X[0],Y[0],Z[0], linestyle="none", c=colrs[k], marker = 'o',label='{}={}'.format(geneNames[iz],z))
+        for l,zz in enumerate(vProt[1]):
+            for k,z in enumerate(vz) :
+                Z = fits_norm[:,l,:,k].transpose()
+                ax.plot_surface(X, Y, Z,color=colrs[k])
+                ax.plot(X[0],Y[0],Z[0], linestyle="none", c=colrs[k], marker = 'o',label='{}={}'.format(geneNames[iz],z))
     elif ix==1 and iy==2 and iz==3:
-        for k,z in enumerate(z) :
-            Z = fits_norm[0,:,:,k].transpose()
-            ax.plot_surface(X, Y, Z,color=colrs[k])
-            ax.plot(X[0],Y[0],Z[0], linestyle="none", c=colrs[k], marker = 'o',label='{}={}'.format(geneNames[iz],z))
+        for l,zz in enumerate(vProt[0]):
+            for k,z in enumerate(vz) :
+                Z = fits_norm[l,:,:,k].transpose()
+                ax.plot_surface(X, Y, Z,color=colrs[k])
+                ax.plot(X[0],Y[0],Z[0], linestyle="none", c=colrs[k], marker = 'o',label='{}={}'.format(geneNames[iz],z))
     ax.set_xlabel(geneNames[ix])
     ax.set_ylabel(geneNames[iy])
     ax.legend()
