@@ -51,6 +51,10 @@ class GeneMap():
                 n=n.replace('.dat','')
                 s=n.split('\\')
                 return s[-1]
+            elif n.find('/')>0:
+                n=n.replace('.dat','')
+                s=n.split('/')
+                return s[-1]
             else:
                 return n
         self.name          = name
