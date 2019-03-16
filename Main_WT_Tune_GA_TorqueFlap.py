@@ -125,7 +125,15 @@ def individualFitness(chromosome,outdir=None,ForceEvaluation=False,stat=''):
 
 def evalNeutralChromosome(outdir=None,ForceEvaluation=False):
     print('Neutral chromosome...')
-    neutral=galib.Indiv()
+    try:
+        # If creator exists, we use it
+        toolbox = base.Toolbox()
+        toolbox.register("attr_float" , random.random)
+        toolbox.register("individual", tools.initRepeat, creator.Individual, toolbox.attr_float, CH_MAP.nBases) 
+        neutral=toolbox.individual()
+    except:
+        # we a generic implementation (will fail on some of the deap call)
+        neutral=galib.Indiv()
     neutral[:]=CH_MAP.neutralChromosome()
     neutral.fitness.values=individualFitness(neutral,outdir=outdir,ForceEvaluation=ForceEvaluation)
     NeutralValues=neutral.data['perf']
@@ -365,10 +373,8 @@ def mainGA(nBase=2,nInd=10,nIndSelect=10,CXPB=0.3,MUTPB=0.3,nIterMax=100,nPerTou
     # create an initial population
     pop = toolbox.population(n=nInd)
     if bEnforceNeutral:
-        pop.append(toolbox.clone(neutral_ori))
+        pop.append(galib.clone(neutral_ori))
     pop = galib.populationTrimAccuracy(pop,int(np.log10(RESOLUTION)))
-
-    #StatsFits.append = np.zeros((nIterMax,nObjectives)
     
     # --- EVALUATE the entire population
     for ind in pop:
@@ -390,7 +396,7 @@ def mainGA(nBase=2,nInd=10,nIndSelect=10,CXPB=0.3,MUTPB=0.3,nIterMax=100,nPerTou
         g = g + 1
         # --- SUPER INDIVIDUALS
         # first we select the extremes bests
-        best = galib.selBestByNorm(pop,weights=objectiveWeights)
+        best = galib.selBestByNorm     (pop,weights=objectiveWeights)
         extr = galib.selIndependentBest(pop,weights=objectiveWeights)
         enforce=[]
         if bEnforceBests:
@@ -550,7 +556,6 @@ print(CH_MAP)
 # --- Derived Params
 IPlot              = PerformanceSignals
 objectiveWeights=(-1.0,)*len(PerformanceSignals) # negative = minimalization 
-nObjectives=len(objectiveWeights)
 # -- Reference operating conditions and performance values (table as function of WS)
 RefValues=pd.read_csv(RefFile)
 RefValues['Pitch']=RefValues['Pitch']*0+1
@@ -585,7 +590,7 @@ pop,best_ind=mainGA(nBase=CH_MAP.nBases
 #          ,MutMethod='PolyBound',MutParam1=0.001,nPerTournament=2
 #            ,MutMethod='UniBound',MutParam1=np.nan,nPerTournament=2
           ,MutMethod='GaussianBound',MutParam1=0.01,nPerTournament=2
-          ,nIterMax=50);
+          ,nIterMax=100);
 
 ###
 # #neutral=getNeutralChromosome();

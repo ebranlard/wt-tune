@@ -125,6 +125,14 @@ def individualFitness(chromosome,outdir=None,ForceEvaluation=False,stat=''):
 
 def evalNeutralChromosome(outdir=None,ForceEvaluation=False):
     print('Neutral chromosome...')
+    try:
+        # If creator exist, we use it
+        toolbox = base.Toolbox()
+        toolbox.register("attr_float" , random.random)
+        toolbox.register("individual", tools.initRepeat, creator.Individual, toolbox.attr_float, CH_MAP.nBases) 
+        neutral=toolbox.individual()
+    except:
+        # we a generic implementation (will fail on some of the deap call)
     neutral=galib.Indiv()
     neutral[:]=CH_MAP.neutralChromosome()
     neutral.fitness.values=individualFitness(neutral,outdir=outdir,ForceEvaluation=ForceEvaluation)
