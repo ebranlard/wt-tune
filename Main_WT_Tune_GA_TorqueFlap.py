@@ -496,8 +496,8 @@ def mainGA(nBase=2,nInd=10,nIndSelect=10,CXPB=0.3,MUTPB=0.3,nIterMax=100,nPerTou
 RESOLUTION = 1000; # resolution for variable range between min and max
 FAST=1
 if FAST==1:
-    GA_DIR  = '_GA_Runs'
-    DB_DIR  = '_GA_Runs_DB'
+    GA_DIR  = '_GA_AF'
+    DB_DIR  = '_GA_AF_DB'
     ref_dir = 'OpenFAST_V27_v2_forGA/'
     WS_SIM  = np.array([4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10])
 
@@ -515,7 +515,7 @@ else:
 RefFile = '_data/swiftData_Half_Binned.csv'
 # --- GA Specific options
 bEnforceBests=True
-bEnforceNeutral=False
+bEnforceNeutral=True
 
 # --- CHOICE OF TUNING PARAMETERS
 PerformanceSignals = ['RPM','FlapM','Pgen']
@@ -569,7 +569,7 @@ print(RefValues)
 # --- Full GA
 # --------------------------------------------------------------------------------{
 ### --- INIT
-# figs=[]
+figs=[]
 # figs+=figlib.fig_grid(AreaName='Left',ScreenName='RightScreen')
 # figs+=figlib.fig_grid(2,1,AreaName='Right',ScreenName='RightScreen')
 # figs+=figlib.fig_grid(AreaName='TopRight',ScreenName='RightScreen')
@@ -585,7 +585,7 @@ pop,best_ind=mainGA(nBase=CH_MAP.nBases
 #          ,MutMethod='PolyBound',MutParam1=0.001,nPerTournament=2
 #            ,MutMethod='UniBound',MutParam1=np.nan,nPerTournament=2
           ,MutMethod='GaussianBound',MutParam1=0.01,nPerTournament=2
-          ,nIterMax=100);
+          ,nIterMax=50);
 
 ###
 # #neutral=getNeutralChromosome();
