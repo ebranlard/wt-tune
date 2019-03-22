@@ -155,7 +155,6 @@ def exportBestData(best,best_dir_dest, RefValues=None, NeutralValues=None):
         dfRef=dfRef[['WS', 'RPM', 'Pitch' , 'Pgen', 'Qgen', 'FlapM']]
         dfRef.to_csv(os.path.join(best_dir_dest,'ResultsMeasurements.csv'),index=False)
 
-
     Vals+=[best.data['perf']]
 
     if NeutralValues is not None:
@@ -450,13 +449,7 @@ def mainGA(nBase=2,nInd=10,nIndSelect=10,CXPB=0.3,MUTPB=0.3,nIterMax=100,nPerTou
         best_dir_src  = os.path.normpath(os.path.join(ref_dir,'..',GA_DIR,''+best.data['ID']))
         best_dir_dest = os.path.normpath(os.path.join(ref_dir,'..',GA_DIR,'_Best'))
         distutils.dir_util.copy_tree(best_dir_src, best_dir_dest)
-        with open(os.path.join(best_dir_dest,'chromosome.csv'),'w') as f:
-            v=[best.data['ID']]+[v for v in best.fitness.values]+best
-            sv = ', '.join([str(val) for val in v])
-            f.write(sv)
-            f.write(CH_MAP.show_full(best))
-        df = pd.concat([RefValuesNewCol,best.data['perf'],NeutralValues],axis=1)
-        df.to_csv(os.path.join(best_dir_dest,'Results.csv'),index=False)
+        exportBestData(best, best_dir_dest, RefValuesNewCol, NeutralValues)
 
         # --- STATS
         recent_stats,stats = galib.populationStats(pop,best,stats)
