@@ -511,7 +511,7 @@ if platform.system()=='Linux':
     EXE     = '_Exe/gcc'
 else:
 	EXE     = '_Exe/OpenFAST2_x64s_ebra.exe'  ;
-RefFile = '_data/swiftData_Half_Binned.csv'
+RefFile = '_data/swiftData_Binned.csv'
 # --- GA Specific options
 bEnforceBests=True
 bEnforceNeutral=True
